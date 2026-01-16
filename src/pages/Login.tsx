@@ -3,11 +3,8 @@ import { useNavigate } from "react-router-dom";
 import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
 
-const PASSWORD_CORRECTA = "12345";
-
 export default function Login() {
   const [codigo, setCodigo] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
@@ -20,13 +17,8 @@ export default function Login() {
       return;
     }
 
-    if (password !== PASSWORD_CORRECTA) {
-      setError("Credenciales incorrectas");
-      return;
-    }
-
     setError("");
-    navigate("/home"); // 🚀 ir al dashboard
+    navigate("/home"); 
   };
 
   return (
@@ -59,7 +51,7 @@ export default function Login() {
                   Código
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   value={codigo}
                   maxLength={5}
                   inputMode="numeric"
@@ -67,20 +59,6 @@ export default function Login() {
                   onChange={(e) =>
                     setCodigo(e.target.value.replace(/\D/g, ""))
                   }
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700"
-                  required
-                />
-              </div>
-
-              {/* PASSWORD */}
-              <div>
-                <label className="block text-sm text-slate-300 mb-1">
-                  Contraseña
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700"
                   required
                 />

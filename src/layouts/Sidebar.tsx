@@ -55,6 +55,7 @@ export default function Dashboard({ userName, children }: DashboardProps) {
 
   const menuItems: MenuItem[] = [
     { name: "Usuarios", path: "/usuarios", subItems: [] },
+     { name: "Clientes", path: "/clientes", subItems: [] },
     {
       name: "Dar alta productos",
       subItems: [
@@ -71,6 +72,14 @@ export default function Dashboard({ userName, children }: DashboardProps) {
       subItems: [
         { name: "Anticipo / Liquidación", path: "/ventas/anticipo" },
         { name: "Seguimiento", path: "/ventas/seguimiento" },
+      ],
+    },
+    {
+      name: "Precios productos",
+      subItems: [
+        { name: "Plástico", path: "/plasticoP" },
+        { name: "Papel", path: "/papelP" },
+        { name: "Cartón", path: "/cartonP" },
       ],
     },
   ];
