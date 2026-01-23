@@ -66,18 +66,19 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     },
     { name: "Cotización", path: "/cotizar", subItems: [] },
     { name: "Pedido", path: "/pedido", subItems: [] },
-    { name: "Producción", path: "/produccion", subItems: [] },
+    { name: "Diseño", path: "/diseno", subItems: [] },
+    { name: "Seguimiento", path: "/seguimiento", subItems: [] },
     {
       name: "Ventas",
       subItems: [
-        { name: "Anticipo / Liquidación", path: "/ventas/anticipo" },
+        { name: "Anticipo / Liquidación", path: "/anticipolicacion" },
         { name: "Seguimiento", path: "/ventas/seguimiento" },
       ],
     },
     {
       name: "Precios productos",
       subItems: [
-        { name: "Plástico", path: "/plasticoP" },
+        { name: "Plástico", path: "/precioplastico" },
         { name: "Papel", path: "/papelP" },
         { name: "Cartón", path: "/cartonP" },
       ],

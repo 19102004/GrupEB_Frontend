@@ -1,7 +1,6 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
-import FormularioCotizacion from "../components/FormularioCotizacion";
-import EditarCotizacion from "../components/EditarCotizacion";
+import EditarDiseno from "../components/EditarDiseno";
 import { useState } from "react";
 
 interface Producto {
@@ -12,7 +11,7 @@ interface Producto {
   tintas: number;
   caras: number;
   disenoAprobado: boolean;
-  cantidadesSeleccionadas?: boolean[]; // Array de 3 booleanos
+  observacionesDiseno?: string;
 }
 
 interface Cotizacion {
@@ -29,24 +28,7 @@ interface Cotizacion {
   anticipoAprobado: boolean;
 }
 
-interface DatosCotizacion {
-  cliente: string;
-  telefono: string;
-  correo: string;
-  empresa: string;
-  productos: {
-    nombre: string;
-    cantidades: [number, number, number];
-    precios: [number, number, number];
-    calibre: string;
-    tintas: number;
-    caras: number;
-  }[];
-  observaciones: string;
-}
-
-export default function Cotizaciones() {
-  const [modalOpen, setModalOpen] = useState(false);
+export default function Diseno() {
   const [modalEditarOpen, setModalEditarOpen] = useState(false);
   const [cotizacionEditando, setCotizacionEditando] = useState<Cotizacion | null>(null);
   const [busqueda, setBusqueda] = useState("");
@@ -66,7 +48,7 @@ export default function Cotizaciones() {
           tintas: 2, 
           caras: 1, 
           disenoAprobado: false,
-          cantidadesSeleccionadas: [false, true, false]
+          observacionesDiseno: ""
         },
         { 
           nombre: "Bolsa troquelada 40x50 alta densidad", 
@@ -76,7 +58,7 @@ export default function Cotizaciones() {
           tintas: 3, 
           caras: 2, 
           disenoAprobado: true,
-          cantidadesSeleccionadas: [true, false, false]
+          observacionesDiseno: "Cliente solicitó cambiar el color azul por verde"
         }
       ],
       observaciones: "Entrega urgente",
@@ -100,7 +82,7 @@ export default function Cotizaciones() {
           tintas: 1, 
           caras: 1, 
           disenoAprobado: true,
-          cantidadesSeleccionadas: [false, false, true]
+          observacionesDiseno: "Logo actualizado según nueva imagen corporativa"
         }
       ],
       observaciones: "",
@@ -128,8 +110,6 @@ export default function Cotizaciones() {
     return (
       normalizarTexto(cotizacion.cliente).includes(terminoBusqueda) ||
       normalizarTexto(cotizacion.empresa).includes(terminoBusqueda) ||
-      normalizarTexto(cotizacion.correo).includes(terminoBusqueda) ||
-      normalizarTexto(cotizacion.telefono).includes(terminoBusqueda) ||
       normalizarTexto(cotizacion.estado).includes(terminoBusqueda) ||
       cotizacion.id.toString().includes(terminoBusqueda)
     );
@@ -143,76 +123,12 @@ export default function Cotizaciones() {
     }
   };
 
-  const handleEliminar = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar esta cotización?")) {
-      setCotizaciones(cotizaciones.filter(cotizacion => cotizacion.id !== id));
-    }
-  };
-
-  const handleAgregarCotizacion = () => {
-    setModalOpen(true);
-  };
-
-  const calcularTotal = (productos: Producto[]) => {
-    return productos.reduce((total, prod) => {
-      const cantidadesSeleccionadas = prod.cantidadesSeleccionadas || [false, false, false];
-      const subtotal = cantidadesSeleccionadas.reduce((sum, seleccionada, idx) => {
-        if (seleccionada) {
-          const cantidad = Number(prod.cantidades[idx]) || 0;
-          const precio = Number(prod.precios[idx]) || 0;
-          return sum + (cantidad * precio);
-        }
-        return sum;
-      }, 0);
-      return total + subtotal;
-    }, 0);
-  };
-
-  const handleSubmit = (datos: DatosCotizacion) => {
-    const productosConDiseno = datos.productos.map(p => ({
-      nombre: p.nombre || "",
-      cantidades: p.cantidades.map(c => Number(c) || 0) as [number, number, number],
-      precios: p.precios.map(pr => Number(pr) || 0) as [number, number, number],
-      calibre: p.calibre || "",
-      tintas: Number(p.tintas) || 0,
-      caras: Number(p.caras) || 0,
-      disenoAprobado: false,
-      cantidadesSeleccionadas: [false, false, false]
-    }));
-
-    const nuevaCotizacion: Cotizacion = {
-      id: cotizaciones.length + 1,
-      cliente: datos.cliente,
-      telefono: datos.telefono,
-      correo: datos.correo,
-      empresa: datos.empresa,
-      productos: productosConDiseno,
-      observaciones: datos.observaciones,
-      total: calcularTotal(productosConDiseno),
-      fecha: new Date().toISOString().split('T')[0],
-      estado: "Pendiente",
-      anticipoAprobado: false
-    };
-
-    setCotizaciones([...cotizaciones, nuevaCotizacion]);
-    setModalOpen(false);
-  };
-
   const handleEditarSubmit = (cotizacionActualizada: Cotizacion) => {
-    // Recalcular el total basado en las cantidades seleccionadas
-    const nuevoTotal = calcularTotal(cotizacionActualizada.productos);
-
     setCotizaciones(cotizaciones.map(cot => 
-      cot.id === cotizacionActualizada.id 
-        ? { ...cotizacionActualizada, total: nuevoTotal } 
-        : cot
+      cot.id === cotizacionActualizada.id ? cotizacionActualizada : cot
     ));
     setModalEditarOpen(false);
     setCotizacionEditando(null);
-  };
-
-  const handleCancelar = () => {
-    setModalOpen(false);
   };
 
   const handleCancelarEditar = () => {
@@ -221,7 +137,7 @@ export default function Cotizaciones() {
   };
 
   const getEstadoBadge = (cotizacion: Cotizacion) => {
-    const { estado, anticipoAprobado, productos } = cotizacion;
+    const { estado, productos } = cotizacion;
     let color = "bg-yellow-100 text-yellow-800";
     let icono = "⏱️";
     
@@ -235,44 +151,27 @@ export default function Cotizaciones() {
 
     const productosAprobados = productos.filter(p => p.disenoAprobado).length;
     const todosDisenos = productos.every(p => p.disenoAprobado);
-    
-    const productosConSeleccion = productos.filter(p => {
-      const cantidadesSeleccionadas = p.cantidadesSeleccionadas || [false, false, false];
-      return cantidadesSeleccionadas.some(sel => sel);
-    }).length;
 
     return (
       <div className="flex flex-col gap-1">
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
           {icono} {estado}
         </span>
-        {productosAprobados > 0 && (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            todosDisenos ? 'bg-blue-100 text-blue-800' : 'bg-blue-50 text-blue-700'
-          }`}>
-            🎨 {productosAprobados}/{productos.length} diseños
-          </span>
-        )}
-        {productosConSeleccion > 0 && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            ✓ {productosConSeleccion}/{productos.length} cantidades
-          </span>
-        )}
-        {anticipoAprobado && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-            💰 Anticipo OK
-          </span>
-        )}
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          todosDisenos ? 'bg-blue-100 text-blue-800' : 'bg-orange-50 text-orange-700'
+        }`}>
+          🎨 {productosAprobados}/{productos.length} diseños
+        </span>
       </div>
     );
   };
 
   return (
     <Dashboard userName="Administrador">
-      <h1 className="text-2xl font-bold mb-4">Cotizaciones</h1>
+      <h1 className="text-2xl font-bold mb-4">Gestión de Diseños</h1>
 
       <p className="text-slate-400 mb-6">
-        Gestión de cotizaciones y seguimiento de aprobaciones.
+        Administra y aprueba los diseños de productos de cada cotización.
       </p>
 
       {/* BUSCADOR */}
@@ -282,7 +181,7 @@ export default function Cotizaciones() {
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por cliente, empresa, correo, teléfono, estado o ID..."
+            placeholder="Buscar por cliente, empresa, estado o ID..."
             className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <svg
@@ -326,9 +225,6 @@ export default function Cotizaciones() {
                 Productos
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Total
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Estado
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -358,7 +254,14 @@ export default function Cotizaciones() {
                       {cotizacion.productos.length} producto(s)
                       <div className="text-xs text-gray-400 mt-1">
                         {cotizacion.productos.slice(0, 2).map((p, i) => (
-                          <div key={i}>• {p.nombre.substring(0, 30)}...</div>
+                          <div key={i} className="flex items-center gap-1">
+                            {p.disenoAprobado ? (
+                              <span className="text-green-600">✓</span>
+                            ) : (
+                              <span className="text-orange-600">⏱️</span>
+                            )}
+                            {p.nombre.substring(0, 30)}...
+                          </div>
                         ))}
                         {cotizacion.productos.length > 2 && (
                           <div>+ {cotizacion.productos.length - 2} más</div>
@@ -366,31 +269,22 @@ export default function Cotizaciones() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                    ${cotizacion.total.toFixed(2)}
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {getEstadoBadge(cotizacion)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
                       onClick={() => handleEditar(cotizacion.id)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
+                      className="text-blue-600 hover:text-blue-900"
                     >
                       Ver/Editar
-                    </button>
-                    <button
-                      onClick={() => handleEliminar(cotizacion.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Eliminar
                     </button>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   No se encontraron cotizaciones que coincidan con "{busqueda}"
                 </td>
               </tr>
@@ -399,22 +293,9 @@ export default function Cotizaciones() {
         </table>
       </div>
 
-      <div className="mt-6">
-        <button
-          onClick={handleAgregarCotizacion}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200"
-        >
-          + Nueva Cotización
-        </button>
-      </div>
-
-      <Modal isOpen={modalOpen} onClose={handleCancelar} title="Nueva Cotización">
-        <FormularioCotizacion onSubmit={handleSubmit} onCancel={handleCancelar} />
-      </Modal>
-
-      <Modal isOpen={modalEditarOpen} onClose={handleCancelarEditar} title="Editar Cotización">
+      <Modal isOpen={modalEditarOpen} onClose={handleCancelarEditar} title="Gestionar Diseños">
         {cotizacionEditando && (
-          <EditarCotizacion 
+          <EditarDiseno 
             cotizacion={cotizacionEditando} 
             onSave={handleEditarSubmit} 
             onCancel={handleCancelarEditar} 
