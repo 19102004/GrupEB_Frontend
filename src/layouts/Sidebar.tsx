@@ -21,7 +21,7 @@ export default function Dashboard({ userName, children }: DashboardProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Detectar tamaño de pantalla
+  // Detectar tamaño
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -34,28 +34,9 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Expandir menú automáticamente si un subItem está activo
-  useEffect(() => {
-    menuItems.forEach((item) => {
-      if (item.subItems.some((sub) => location.pathname.startsWith(sub.path))) {
-        setExpandedMenus((prev) =>
-          prev.includes(item.name) ? prev : [...prev, item.name]
-        );
-      }
-    });
-  }, [location.pathname]);
-
-  const toggleMenu = (menuName: string) => {
-    setExpandedMenus((prev) =>
-      prev.includes(menuName)
-        ? prev.filter((name) => name !== menuName)
-        : [...prev, menuName]
-    );
-  };
-
   const menuItems: MenuItem[] = [
     { name: "Usuarios", path: "/usuarios", subItems: [] },
-     { name: "Clientes", path: "/clientes", subItems: [] },
+    { name: "Clientes", path: "/clientes", subItems: [] },
     {
       name: "Dar alta productos",
       subItems: [
@@ -69,11 +50,9 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     { name: "Diseño", path: "/diseno", subItems: [] },
     { name: "Seguimiento", path: "/seguimiento", subItems: [] },
     {
-      name: "Ventas",
-      subItems: [
-        { name: "Anticipo / Liquidación", path: "/anticipolicacion" },
-        { name: "Seguimiento", path: "/ventas/seguimiento" },
-      ],
+      name: "Anticipo / Liquidación",
+      path: "/anticipolicacion",
+      subItems: [],
     },
     {
       name: "Precios productos",
@@ -85,12 +64,32 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     },
   ];
 
+  // Expandir menú activo
+  useEffect(() => {
+    menuItems.forEach((item) => {
+      if (item.subItems.some((sub) => location.pathname.startsWith(sub.path))) {
+        setExpandedMenus((prev) =>
+          prev.includes(item.name) ? prev : [...prev, item.name]
+        );
+      }
+    });
+  }, [location.pathname]);
+
+  const toggleMenu = (menuName: string) => {
+    setExpandedMenus((prev) =>
+      prev.includes(menuName)
+        ? prev.filter((n) => n !== menuName)
+        : [...prev, menuName]
+    );
+  };
+
   const isActive = (path?: string) =>
     path && location.pathname.startsWith(path);
 
   const renderMenuItem = (item: MenuItem) => {
-    const hasSubItems = item.subItems.length > 0;
-    const isExpanded = expandedMenus.includes(item.name);
+    const hasSub = item.subItems.length > 0;
+    const expanded = expandedMenus.includes(item.name);
+
     const activeParent =
       item.path && isActive(item.path)
         ? true
@@ -100,14 +99,13 @@ export default function Dashboard({ userName, children }: DashboardProps) {
       <div key={item.name}>
         <button
           onClick={() => {
-            if (hasSubItems) {
-              toggleMenu(item.name);
-            } else if (item.path) {
+            if (hasSub) toggleMenu(item.name);
+            else if (item.path) {
               navigate(item.path);
               if (isMobile) setOpen(false);
             }
           }}
-          className={`w-full text-left px-3 py-2 rounded transition flex items-center justify-between
+          className={`w-full text-left px-3 py-2 rounded transition flex justify-between
             ${
               activeParent
                 ? "bg-slate-700 text-white font-semibold"
@@ -116,10 +114,10 @@ export default function Dashboard({ userName, children }: DashboardProps) {
         >
           <span>{item.name}</span>
 
-          {hasSubItems && (
+          {hasSub && (
             <span
               className={`transition-transform ${
-                isExpanded ? "rotate-180" : ""
+                expanded ? "rotate-180" : ""
               }`}
             >
               ▼
@@ -127,7 +125,7 @@ export default function Dashboard({ userName, children }: DashboardProps) {
           )}
         </button>
 
-        {hasSubItems && isExpanded && (
+        {hasSub && expanded && (
           <div className="ml-4 mt-1 space-y-1">
             {item.subItems.map((sub) => (
               <button
@@ -136,10 +134,10 @@ export default function Dashboard({ userName, children }: DashboardProps) {
                   navigate(sub.path);
                   if (isMobile) setOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 rounded transition text-sm
+                className={`w-full text-left px-3 py-2 rounded text-sm transition
                   ${
                     isActive(sub.path)
-                      ? "bg-slate-600 text-white font-semibold"
+                      ? "bg-slate-600 text-white"
                       : "text-slate-300 hover:bg-slate-600"
                   }`}
               >
@@ -154,26 +152,29 @@ export default function Dashboard({ userName, children }: DashboardProps) {
 
   return (
     <div className="min-h-screen flex">
-      {/* OVERLAY móvil */}
-      {isMobile && open && (
+      {/* OVERLAY */}
+      {isMobile && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-10"
           onClick={() => setOpen(false)}
+          className={`fixed inset-0 bg-black/50 transition-opacity duration-300
+            ${open ? "opacity-100 z-40" : "opacity-0 pointer-events-none"}`}
         />
       )}
 
       {/* SIDEBAR MÓVIL */}
-      {isMobile && open && (
+      {isMobile && (
         <aside
-          className="fixed inset-y-0 left-0 w-64 bg-slate-800 flex flex-col shadow-lg z-20"
+          className={`fixed inset-y-0 left-0 w-64 bg-slate-800 z-50
+            transform transition-transform duration-300 ease-in-out
+            ${open ? "translate-x-0" : "-translate-x-full"}
+            flex flex-col`}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* HEADER */}
-          <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+          <div className="p-4 border-b border-slate-700 flex justify-between">
             <img
               src={logo}
               alt="Grupeb"
-              className="h-10 w-auto cursor-pointer"
+              className="h-10 cursor-pointer"
               onClick={() => {
                 navigate("/home");
                 setOpen(false);
@@ -182,8 +183,7 @@ export default function Dashboard({ userName, children }: DashboardProps) {
 
             <button
               onClick={() => setOpen(false)}
-              className="text-slate-300 hover:text-white text-2xl font-bold"
-              aria-label="Cerrar menú"
+              className="text-white text-2xl"
             >
               ✕
             </button>
@@ -193,60 +193,54 @@ export default function Dashboard({ userName, children }: DashboardProps) {
             {menuItems.map(renderMenuItem)}
           </nav>
 
-          <div className="border-t border-slate-700 p-4">
-            <div className="flex items-center gap-2 bg-slate-700 rounded-lg px-3 py-2 text-white">
-              <span className="text-lg">👤</span>
-              <span className="text-sm">{userName}</span>
+          <div className="border-t border-slate-700 p-4 mt-auto">
+            <div className="flex gap-2 bg-slate-700 px-3 py-2 rounded text-white">
+              👤 {userName}
             </div>
           </div>
         </aside>
       )}
 
-      {/* SIDEBAR DESKTOP */}
+      {/* SIDEBAR DESKTOP / TABLET */}
       {!isMobile && (
-        <aside className="w-64 bg-slate-800 flex flex-col shadow-lg">
+        <aside className="fixed inset-y-0 left-0 w-64 bg-slate-800 z-30 flex flex-col h-screen">
           <div
             className="p-4 border-b border-slate-700 cursor-pointer"
             onClick={() => navigate("/home")}
           >
-            <img src={logo} alt="Grupeb" className="h-10 w-auto mx-auto" />
+            <img src={logo} className="h-10 mx-auto" />
           </div>
 
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {menuItems.map(renderMenuItem)}
           </nav>
 
-          <div className="border-t border-slate-700 p-4">
-            <div className="flex items-center gap-2 bg-slate-700 rounded-lg px-3 py-2 text-white">
-              <span className="text-lg">👤</span>
-              <span className="text-sm">{userName}</span>
+          <div className="border-t border-slate-700 p-4 mt-auto">
+            <div className="flex gap-2 bg-slate-700 px-3 py-2 rounded text-white">
+              👤 {userName}
             </div>
           </div>
         </aside>
       )}
 
       {/* CONTENIDO */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto ml-0 md:ml-64">
         {isMobile && (
-          <header className="shadow-lg sticky top-0 z-5">
-            <div className="flex items-center justify-between px-4 py-3">
-              <button
-                onClick={() => setOpen(true)}
-                className="p-2 hover:bg-slate-200 rounded text-xl"
-              >
+          <header className="sticky top-0 z-20 bg-white shadow">
+            <div className="flex justify-between px-4 py-3">
+              <button onClick={() => setOpen(true)} className="text-xl">
                 ☰
               </button>
 
               <h1
-                className="text-xl font-bold tracking-wide cursor-pointer"
                 onClick={() => navigate("/home")}
+                className="font-bold cursor-pointer"
               >
                 GRUPEB
               </h1>
 
-              <div className="flex items-center gap-2 bg-slate-200 rounded-lg px-3 py-2">
-                <span className="text-lg">👤</span>
-                <span className="text-sm">{userName}</span>
+              <div className="flex gap-2 bg-slate-200 px-3 py-2 rounded">
+                👤 {userName}
               </div>
             </div>
           </header>

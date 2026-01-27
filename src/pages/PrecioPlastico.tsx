@@ -7,7 +7,10 @@ interface Precio {
   tinta2: number;
   tinta3: number;
   tinta4: number;
-  merma: number;
+  merma1: number;
+  merma2: number;
+  merma3: number;
+  merma4: number;
 }
 
 export default function PrecioPlastico() {
@@ -15,14 +18,14 @@ export default function PrecioPlastico() {
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
 
   const [precios, setPrecios] = useState<Precio[]>([
-    { kilos: 30, tinta1: 250, tinta2: 280, tinta3: 310, tinta4: 340, merma: 20 },
-    { kilos: 50, tinta1: 200, tinta2: 225, tinta3: 250, tinta4: 275, merma: 10 },
-    { kilos: 75, tinta1: 180, tinta2: 200, tinta3: 220, tinta4: 240, merma: 8 },
-    { kilos: 100, tinta1: 150, tinta2: 170, tinta3: 190, tinta4: 210, merma: 7 },
-    { kilos: 200, tinta1: 95, tinta2: 115, tinta3: 135, tinta4: 155, merma: 5 },
-    { kilos: 300, tinta1: 90, tinta2: 110, tinta3: 130, tinta4: 150, merma: 4 },
-    { kilos: 500, tinta1: 90, tinta2: 105, tinta3: 120, tinta4: 135, merma: 3 },
-    { kilos: 1000, tinta1: 90, tinta2: 100, tinta3: 110, tinta4: 120, merma: 1 },
+    { kilos: 30, tinta1: 250, tinta2: 280, tinta3: 310, tinta4: 340, merma1: 20, merma2: 22, merma3: 24, merma4: 26 },
+    { kilos: 50, tinta1: 200, tinta2: 225, tinta3: 250, tinta4: 275, merma1: 10, merma2: 12, merma3: 14, merma4: 16 },
+    { kilos: 75, tinta1: 180, tinta2: 200, tinta3: 220, tinta4: 240, merma1: 8, merma2: 10, merma3: 12, merma4: 14 },
+    { kilos: 100, tinta1: 150, tinta2: 170, tinta3: 190, tinta4: 210, merma1: 7, merma2: 9, merma3: 11, merma4: 13 },
+    { kilos: 200, tinta1: 95, tinta2: 115, tinta3: 135, tinta4: 155, merma1: 5, merma2: 7, merma3: 9, merma4: 11 },
+    { kilos: 300, tinta1: 90, tinta2: 110, tinta3: 130, tinta4: 150, merma1: 4, merma2: 6, merma3: 8, merma4: 10 },
+    { kilos: 500, tinta1: 90, tinta2: 105, tinta3: 120, tinta4: 135, merma1: 3, merma2: 5, merma3: 7, merma4: 9 },
+    { kilos: 1000, tinta1: 90, tinta2: 100, tinta3: 110, tinta4: 120, merma1: 1, merma2: 3, merma3: 5, merma4: 7 },
   ]);
 
   const [preciosBackup, setPreciosBackup] = useState<Precio[]>([]);
@@ -95,36 +98,50 @@ export default function PrecioPlastico() {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="bg-blue-600 text-white">
-                <th className="border px-3 py-2">Kg</th>
-                <th className="border px-3 py-2">1 tinta</th>
-                <th className="border px-3 py-2">2 tintas</th>
-                <th className="border px-3 py-2">3 tintas</th>
-                <th className="border px-3 py-2">4 tintas</th>
-                <th className="border px-3 py-2">Merma %</th>
+                <th className="border px-3 py-2" rowSpan={2}>Kg</th>
+                <th className="border px-3 py-2" colSpan={2}>1 tinta</th>
+                <th className="border px-3 py-2" colSpan={2}>2 tintas</th>
+                <th className="border px-3 py-2" colSpan={2}>3 tintas</th>
+                <th className="border px-3 py-2" colSpan={2}>4 tintas</th>
+              </tr>
+              <tr className="bg-blue-500 text-white">
+                <th className="border px-2 py-1 text-xs">Precio</th>
+                <th className="border px-2 py-1 text-xs">Merma %</th>
+                <th className="border px-2 py-1 text-xs">Precio</th>
+                <th className="border px-2 py-1 text-xs">Merma %</th>
+                <th className="border px-2 py-1 text-xs">Precio</th>
+                <th className="border px-2 py-1 text-xs">Merma %</th>
+                <th className="border px-2 py-1 text-xs">Precio</th>
+                <th className="border px-2 py-1 text-xs">Merma %</th>
               </tr>
             </thead>
 
             <tbody>
               {precios.map((item) => (
                 <tr key={item.kilos} className="even:bg-gray-50">
-                  <td className="border px-3 py-2 text-center font-medium">
+                  <td className="border px-3 py-2 text-center font-medium bg-gray-100">
                     {item.kilos}k
                   </td>
 
-                  {["tinta1", "tinta2", "tinta3", "tinta4", "merma"].map(
-                    (campo) => (
+                  {[
+                    { precio: "tinta1", merma: "merma1" },
+                    { precio: "tinta2", merma: "merma2" },
+                    { precio: "tinta3", merma: "merma3" },
+                    { precio: "tinta4", merma: "merma4" },
+                  ].map(({ precio, merma }) => (
+                    <>
                       <td
-                        key={campo}
+                        key={precio}
                         className="border px-3 py-2 text-center"
                       >
                         {editando ? (
                           <input
                             type="number"
-                            value={item[campo as keyof Precio]}
+                            value={item[precio as keyof Precio]}
                             onChange={(e) =>
                               actualizarCampo(
                                 item.kilos,
-                                campo as keyof Precio,
+                                precio as keyof Precio,
                                 Number(e.target.value)
                               )
                             }
@@ -132,18 +149,39 @@ export default function PrecioPlastico() {
                             className="w-20 text-center border rounded-lg px-2 py-1
                                      focus:border-blue-500 focus:outline-none"
                           />
-                        ) : campo === "merma" ? (
-                          <span className="font-semibold text-gray-700">
-                            {item.merma}%
-                          </span>
                         ) : (
                           <span className="font-semibold text-gray-700">
-                            ${item[campo as keyof Precio]}
+                            ${item[precio as keyof Precio]}
                           </span>
                         )}
                       </td>
-                    )
-                  )}
+                      <td
+                        key={merma}
+                        className="border px-3 py-2 text-center bg-amber-50"
+                      >
+                        {editando ? (
+                          <input
+                            type="number"
+                            value={item[merma as keyof Precio]}
+                            onChange={(e) =>
+                              actualizarCampo(
+                                item.kilos,
+                                merma as keyof Precio,
+                                Number(e.target.value)
+                              )
+                            }
+                            onKeyDown={handleKeyDown}
+                            className="w-16 text-center border rounded-lg px-2 py-1
+                                     focus:border-blue-500 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="font-semibold text-amber-700">
+                            {item[merma as keyof Precio]}%
+                          </span>
+                        )}
+                      </td>
+                    </>
+                  ))}
                 </tr>
               ))}
             </tbody>

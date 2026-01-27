@@ -2,18 +2,15 @@ import { useState } from "react";
 import FormularioPedido from "../components/FormularioPedido";
 import CrearPedido from "../components/CrearPedido";
 import Modal from "../components/Modal";
+import Dashboard from "../layouts/Sidebar";
 
 interface Producto {
-  descripcion: string;
-  medidas: string;
-  cantidad: number;
+  nombre: string;
+  cantidades: [number, number, number];
+  precios: [number, number, number];
   calibre: string;
   tintas: number;
   caras: number;
-  material: string;
-  asaSuaje: string;
-  precioUnitario: number;
-  importe: number;
 }
 
 interface Pedido {
@@ -49,28 +46,20 @@ export default function Pedidos() {
       correo: "maria.gonzalez@empresa.com",
       productos: [
         {
-          descripcion: "Bolsa plana",
-          medidas: "30x40",
-          cantidad: 2000,
+          nombre: "Bolsa plana 30x40 baja densidad",
+          cantidades: [2000, 0, 0],
+          precios: [1.4, 0, 0],
           calibre: "200",
           tintas: 2,
-          caras: 1,
-          material: "Baja Densidad",
-          asaSuaje: "Sin asa/suaje",
-          precioUnitario: 1.4,
-          importe: 2800
+          caras: 1
         },
         {
-          descripcion: "Bolsa troquelada",
-          medidas: "40x50",
-          cantidad: 500,
+          nombre: "Bolsa troquelada 40x50 alta densidad",
+          cantidades: [500, 0, 0],
+          precios: [2.0, 0, 0],
           calibre: "250",
           tintas: 3,
-          caras: 2,
-          material: "Alta Densidad",
-          asaSuaje: "Troquelada",
-          precioUnitario: 2.0,
-          importe: 1000
+          caras: 2
         }
       ],
       total: 3800,
@@ -88,16 +77,12 @@ export default function Pedidos() {
       correo: "carlos.hdez@comercial.mx",
       productos: [
         {
-          descripcion: "Bolsa celofán",
-          medidas: "30x40",
-          cantidad: 5000,
+          nombre: "Bolsa celofán 30x40 BOPP",
+          cantidades: [5000, 0, 0],
+          precios: [1.6, 0, 0],
           calibre: "175",
           tintas: 1,
-          caras: 1,
-          material: "BOPP",
-          asaSuaje: "Sin asa/suaje",
-          precioUnitario: 1.6,
-          importe: 8000
+          caras: 1
         }
       ],
       total: 8000,
@@ -115,16 +100,12 @@ export default function Pedidos() {
       correo: "ana.ruiz@tienda.com",
       productos: [
         {
-          descripcion: "Bolsa asa flexible",
-          medidas: "40x50",
-          cantidad: 1500,
+          nombre: "Bolsa asa flexible 40x50 alta densidad",
+          cantidades: [1500, 0, 0],
+          precios: [2.5, 0, 0],
           calibre: "225",
           tintas: 4,
-          caras: 2,
-          material: "Alta Densidad",
-          asaSuaje: "Asa flexible",
-          precioUnitario: 2.5,
-          importe: 3750
+          caras: 2
         }
       ],
       total: 3750,
@@ -180,7 +161,7 @@ export default function Pedidos() {
       return (
         <div className="flex flex-col gap-1">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            ⚠️ Pendiente pago anticipo
+            ⚠️ Pendiente anticipo
           </span>
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
             🎨 Pendiente diseño
@@ -190,7 +171,7 @@ export default function Pedidos() {
     } else if (!anticipoAprobado) {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-          ⚠️ Pendiente pago anticipo
+          ⚠️ Pendiente anticipo
         </span>
       );
     } else if (!disenoAprobado) {
@@ -214,16 +195,33 @@ export default function Pedidos() {
     setPedidoEditando(null);
   };
 
-  const handleCrearPedido = (nuevoPedido: Omit<Pedido, "id" | "numeroPedido" | "fecha">) => {
+  const handleCrearPedido = (datosPedido: any) => {
     const nuevoId = pedidos.length > 0 ? Math.max(...pedidos.map(p => p.id)) + 1 : 1;
     const numeroPedido = `PED-2025-${String(nuevoId).padStart(3, '0')}`;
     const fecha = new Date().toISOString().split('T')[0];
 
+    // Calcular el total
+    const total = datosPedido.productos.reduce((sum: number, prod: Producto) => {
+      const subtotal = prod.cantidades.reduce(
+        (s: number, cant: number, i: number) => s + cant * prod.precios[i],
+        0
+      );
+      return sum + subtotal;
+    }, 0);
+
     const pedidoCompleto: Pedido = {
-      ...nuevoPedido,
       id: nuevoId,
       numeroPedido,
-      fecha
+      fecha,
+      cliente: datosPedido.cliente,
+      empresa: datosPedido.empresa,
+      telefono: datosPedido.telefono,
+      correo: datosPedido.correo,
+      productos: datosPedido.productos,
+      total: total,
+      observaciones: datosPedido.observaciones,
+      disenoAprobado: datosPedido.disenoAprobado,
+      anticipoAprobado: datosPedido.anticipoAprobado
     };
 
     setPedidos([...pedidos, pedidoCompleto]);
@@ -231,7 +229,7 @@ export default function Pedidos() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <Dashboard userName="Administrador">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Pedidos</h1>
         <p className="text-gray-600 mb-6">
@@ -348,43 +346,62 @@ export default function Pedidos() {
                             <div className="space-y-4">
                               <h4 className="font-semibold text-gray-900 mb-3">Detalles del Pedido</h4>
                               
+                              <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                  <p className="text-sm font-medium text-gray-700">Teléfono:</p>
+                                  <p className="text-sm text-gray-900">{pedido.telefono}</p>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                  <p className="text-sm font-medium text-gray-700">Correo:</p>
+                                  <p className="text-sm text-gray-900">{pedido.correo}</p>
+                                </div>
+                              </div>
+
                               <div className="overflow-x-auto">
                                 <table className="min-w-full bg-white rounded-lg overflow-hidden">
                                   <thead className="bg-gray-100">
                                     <tr>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Descripción</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Medidas</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Cantidad</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Producto</th>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Calibre</th>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Tintas</th>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Caras</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Material</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Asa/Suaje</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Precio Unit.</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Importe</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Cantidades</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Precios Unit.</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-600">Subtotal</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-200">
-                                    {pedido.productos.map((producto, idx) => (
-                                      <tr key={idx} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.descripcion}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.medidas}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.cantidad.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.calibre}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.tintas}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.caras}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.material}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{producto.asaSuaje}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">${producto.precioUnitario.toFixed(2)}</td>
-                                        <td className="px-4 py-3 text-sm font-semibold text-gray-900">${producto.importe.toFixed(2)}</td>
-                                      </tr>
-                                    ))}
+                                    {pedido.productos.map((producto, idx) => {
+                                      const subtotal = producto.cantidades.reduce(
+                                        (sum, cant, i) => sum + cant * producto.precios[i],
+                                        0
+                                      );
+                                      return (
+                                        <tr key={idx} className="hover:bg-gray-50">
+                                          <td className="px-4 py-3 text-sm text-gray-900">{producto.nombre}</td>
+                                          <td className="px-4 py-3 text-sm text-gray-900">{producto.calibre}</td>
+                                          <td className="px-4 py-3 text-sm text-gray-900">{producto.tintas}</td>
+                                          <td className="px-4 py-3 text-sm text-gray-900">{producto.caras}</td>
+                                          <td className="px-4 py-3 text-sm text-gray-900">
+                                            {producto.cantidades.map((cant, i) => 
+                                              cant > 0 ? <div key={i}>Cant. {i+1}: {cant.toLocaleString()}</div> : null
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-3 text-sm text-gray-900">
+                                            {producto.precios.map((precio, i) => 
+                                              producto.cantidades[i] > 0 ? <div key={i}>${precio.toFixed(4)}</div> : null
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">${subtotal.toFixed(2)}</td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>
 
                               {pedido.observaciones && (
-                                <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+                                <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                                   <p className="text-sm font-medium text-gray-700">Observaciones:</p>
                                   <p className="text-sm text-gray-600 mt-1">{pedido.observaciones}</p>
                                 </div>
@@ -435,6 +452,6 @@ export default function Pedidos() {
           />
         </Modal>
       </div>
-    </div>
+    </Dashboard>
   );
 }
