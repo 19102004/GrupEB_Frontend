@@ -7,7 +7,6 @@ interface Producto {
   calibre: string;
   tintas: number;
   caras: number;
-  disenoAprobado: boolean;
   cantidadesSeleccionadas?: boolean[]; // Array de 3 booleanos
 }
 
@@ -22,7 +21,6 @@ interface Cotizacion {
   total: number;
   fecha: string;
   estado: "Pendiente" | "Aprobada" | "Rechazada";
-  anticipoAprobado: boolean;
 }
 
 interface EditarCotizacionProps {
@@ -54,15 +52,6 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
     }
   };
 
-  const handleToggleDiseno = (index: number) => {
-    const nuevosProductos = [...form.productos];
-    nuevosProductos[index] = {
-      ...nuevosProductos[index],
-      disenoAprobado: !nuevosProductos[index].disenoAprobado
-    };
-    setForm({ ...form, productos: nuevosProductos });
-  };
-
   const handleToggleCantidad = (indexProducto: number, indexCantidad: number) => {
     const nuevosProductos = [...form.productos];
     const cantidadesActuales = nuevosProductos[indexProducto].cantidadesSeleccionadas || [false, false, false];
@@ -74,10 +63,6 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
       cantidadesSeleccionadas: nuevasCantidades
     };
     setForm({ ...form, productos: nuevosProductos });
-  };
-
-  const handleToggleAnticipo = () => {
-    setForm({ ...form, anticipoAprobado: !form.anticipoAprobado });
   };
 
   const handleGuardar = () => {
@@ -102,9 +87,6 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
       return total + subtotal;
     }, 0);
   };
-
-  const productosAprobados = form.productos.filter(p => p.disenoAprobado).length;
-  const todosDisenos = form.productos.every(p => p.disenoAprobado);
   
   const contarCantidadesSeleccionadas = () => {
     return form.productos.reduce((count, prod) => {
@@ -174,21 +156,13 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
                 Productos y Cantidades
               </h3>
               <p className="text-xs text-gray-600 mt-1">
-                Selecciona una o más cantidades por producto y aprueba diseños
+                Selecciona una o más cantidades por producto
               </p>
             </div>
-            <div className="text-right space-y-1">
-              <div>
-                <div className="text-xs text-gray-500">Diseños Aprobados</div>
-                <div className={`text-lg font-bold ${todosDisenos ? 'text-green-600' : 'text-blue-600'}`}>
-                  {productosAprobados}/{form.productos.length}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">Productos con Selección</div>
-                <div className={`text-lg font-bold ${contarCantidadesSeleccionadas() === form.productos.length ? 'text-green-600' : 'text-orange-600'}`}>
-                  {contarCantidadesSeleccionadas()}/{form.productos.length}
-                </div>
+            <div className="text-right">
+              <div className="text-xs text-gray-500">Productos con Selección</div>
+              <div className={`text-lg font-bold ${contarCantidadesSeleccionadas() === form.productos.length ? 'text-green-600' : 'text-orange-600'}`}>
+                {contarCantidadesSeleccionadas()}/{form.productos.length}
               </div>
             </div>
           </div>
@@ -203,11 +177,7 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
               return (
                 <div 
                   key={indexProd} 
-                  className={`bg-white p-4 rounded-lg border-2 transition-all ${
-                    producto.disenoAprobado 
-                      ? 'border-blue-500 shadow-md' 
-                      : 'border-gray-200'
-                  }`}
+                  className="bg-white p-4 rounded-lg border-2 border-gray-200"
                 >
                   {/* Encabezado del Producto */}
                   <div className="mb-3">
@@ -229,7 +199,7 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
                   </div>
 
                   {/* Opciones de Cantidades con Selección Múltiple */}
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200 mb-3">
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
                     <div className="flex items-center justify-between mb-3">
                       <h5 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -296,39 +266,6 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
                       })}
                     </div>
                   </div>
-
-                  {/* Toggle de Aprobación de Diseño */}
-                  <div 
-                    onClick={() => handleToggleDiseno(indexProd)}
-                    className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      producto.disenoAprobado 
-                        ? 'bg-blue-50 border-blue-400 shadow-sm' 
-                        : 'bg-gray-50 border-gray-300 hover:border-blue-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                        producto.disenoAprobado ? 'bg-blue-600 border-blue-600' : 'border-gray-400'
-                      }`}>
-                        {producto.disenoAprobado && (
-                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-gray-900 text-sm">🎨 Diseño de este producto</div>
-                        <div className="text-xs text-gray-500">
-                          {producto.disenoAprobado ? 'Diseño aprobado y listo' : 'Pendiente de aprobación'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      producto.disenoAprobado ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
-                    }`}>
-                      {producto.disenoAprobado ? 'APROBADO' : 'PENDIENTE'}
-                    </div>
-                  </div>
                 </div>
               );
             })}
@@ -347,47 +284,6 @@ export default function EditarCotizacion({ cotizacion, onSave, onCancel }: Edita
           className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
           placeholder="Agrega notas o comentarios adicionales..."
         />
-      </div>
-
-      {/* Aprobación de Anticipo (General) */}
-      <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-5 rounded-lg border-2 border-purple-300">
-        <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">
-          Aprobación General de Anticipo
-        </h3>
-        
-        <div 
-          onClick={handleToggleAnticipo}
-          className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${
-            form.anticipoAprobado 
-              ? 'bg-purple-100 border-purple-500 shadow-md' 
-              : 'bg-white border-gray-300 hover:border-purple-400'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center ${
-              form.anticipoAprobado ? 'bg-purple-600 border-purple-600' : 'border-gray-400'
-            }`}>
-              {form.anticipoAprobado && (
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900">💰 Anticipo Recibido</div>
-              <div className="text-xs text-gray-600">
-                {form.anticipoAprobado 
-                  ? 'El anticipo ha sido recibido y confirmado' 
-                  : 'Anticipo pendiente de confirmación'}
-              </div>
-            </div>
-          </div>
-          <div className={`px-4 py-1.5 rounded-full text-xs font-bold ${
-            form.anticipoAprobado ? 'bg-purple-600 text-white' : 'bg-gray-300 text-gray-600'
-          }`}>
-            {form.anticipoAprobado ? 'CONFIRMADO' : 'PENDIENTE'}
-          </div>
-        </div>
       </div>
 
       {/* Resumen de Totales */}

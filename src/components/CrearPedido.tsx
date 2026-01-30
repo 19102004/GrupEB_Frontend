@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SelectorProducto, { type DatosProducto, type MedidaKey } from "./ConfigurarProducto";
 
 interface Cliente {
   id: string;
@@ -66,6 +67,9 @@ interface Producto {
   calibre: string;
   tintas: number;
   caras: number;
+  material: string;
+  medidas: Record<MedidaKey, string>;
+  medidasFormateadas: string;
 }
 
 interface DatosPedido {
@@ -75,36 +79,94 @@ interface DatosPedido {
   empresa: string;
   productos: Producto[];
   observaciones: string;
-  disenoAprobado: boolean;
-  anticipoAprobado: boolean;
 }
 
-const PRODUCTOS_DISPONIBLES = [
-  "Bolsa plana 30x40 baja densidad",
-  "Bolsa plana 40x50 baja densidad",
-  "Bolsa plana 50x60 baja densidad",
-  "Bolsa troquelada 30x40 alta densidad",
-  "Bolsa troquelada 40x50 alta densidad",
-  "Bolsa troquelada 50x60 alta densidad",
-  "Bolsa celofán 20x30 BOPP",
-  "Bolsa celofán 30x40 BOPP",
-  "Bolsa celofán 40x50 BOPP",
-  "Bolsa envíos 30x40 alta densidad",
-  "Bolsa envíos 40x50 alta densidad",
-  "Bolsa envíos 50x70 alta densidad",
-  "Bolsa asa flexible 30x40 alta densidad",
-  "Bolsa asa flexible 40x50 alta densidad",
-  "Bolsa asa flexible 50x60 alta densidad",
-  "Bobina alta densidad 30cm",
-  "Bobina alta densidad 50cm",
-  "Bobina baja densidad 40cm",
-  "Faldón BOPP 60x90",
-  "Faldón BOPP 80x120",
-  "Lámina BOPP 100x150",
-  "Lámina BOPP 120x180"
-];
+// Productos registrados precargados
+interface ProductoRegistrado {
+  id: string;
+  nombreCompleto: string;
+  tipoProducto: string;
+  material: string;
+  calibre: string;
+  medidas: Record<MedidaKey, string>;
+  medidasFormateadas: string;
+  bolsasPorKilo: string;
+}
 
-const CALIBRES = ["150", "175", "200", "225", "250", "275", "300", "325", "350", "375", "400"];
+const PRODUCTOS_REGISTRADOS: ProductoRegistrado[] = [
+  {
+    id: "1",
+    nombreCompleto: "Bolsa plana 30x40 baja densidad",
+    tipoProducto: "Bolsa plana",
+    material: "Baja densidad",
+    calibre: "200",
+    medidas: {
+      altura: "30",
+      ancho: "40",
+      fuelleFondo: "",
+      fuelleLateral1: "",
+      fuelleLateral2: "",
+      refuerzo: "",
+      solapa: "",
+    },
+    medidasFormateadas: "30x40",
+    bolsasPorKilo: "88.652"
+  },
+  {
+    id: "2",
+    nombreCompleto: "Bolsa plana 40x50 baja densidad",
+    tipoProducto: "Bolsa plana",
+    material: "Baja densidad",
+    calibre: "200",
+    medidas: {
+      altura: "40",
+      ancho: "50",
+      fuelleFondo: "",
+      fuelleLateral1: "",
+      fuelleLateral2: "",
+      refuerzo: "",
+      solapa: "",
+    },
+    medidasFormateadas: "40x50",
+    bolsasPorKilo: "66.489"
+  },
+  {
+    id: "3",
+    nombreCompleto: "Bolsa troquelada 30+10+5x40+8+8 alta densidad",
+    tipoProducto: "Bolsa troquelada",
+    material: "Alta densidad",
+    calibre: "225",
+    medidas: {
+      altura: "30",
+      ancho: "40",
+      fuelleFondo: "10",
+      fuelleLateral1: "8",
+      fuelleLateral2: "8",
+      refuerzo: "5",
+      solapa: "",
+    },
+    medidasFormateadas: "30+10+5x40+8+8",
+    bolsasPorKilo: "55.320"
+  },
+  {
+    id: "4",
+    nombreCompleto: "Bolsa envíos 30+10+5x40 alta densidad",
+    tipoProducto: "Bolsa envíos",
+    material: "Alta densidad",
+    calibre: "250",
+    medidas: {
+      altura: "30",
+      ancho: "40",
+      fuelleFondo: "10",
+      fuelleLateral1: "",
+      fuelleLateral2: "",
+      refuerzo: "",
+      solapa: "5",
+    },
+    medidasFormateadas: "30+10+5x40",
+    bolsasPorKilo: "47.234"
+  },
+];
 
 export default function CrearPedido({
   onSubmit,
@@ -118,12 +180,15 @@ export default function CrearPedido({
     empresa: "",
     productos: [],
     observaciones: "",
-    disenoAprobado: false,
-    anticipoAprobado: false,
   });
 
   const [mostrarModalClientes, setMostrarModalClientes] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState("");
+
+  // Estados para el modo y producto actual
+  const [modoProducto, setModoProducto] = useState<"registrado" | "nuevo">("registrado");
+  const [productoRegistradoSeleccionado, setProductoRegistradoSeleccionado] = useState("");
+  const [mostrarDropdownProductosRegistrados, setMostrarDropdownProductosRegistrados] = useState(false);
 
   const [productoActual, setProductoActual] = useState<Producto>({
     nombre: "",
@@ -132,11 +197,37 @@ export default function CrearPedido({
     calibre: "200",
     tintas: 1,
     caras: 1,
+    material: "",
+    medidas: {
+      altura: "",
+      ancho: "",
+      fuelleFondo: "",
+      fuelleLateral1: "",
+      fuelleLateral2: "",
+      refuerzo: "",
+      solapa: "",
+    },
+    medidasFormateadas: "",
   });
 
-  const [productosFiltrados, setProductosFiltrados] = useState<string[]>([]);
-  const [mostrarDropdown, setMostrarDropdown] = useState(false);
-  const [mostrarDropdownCalibre, setMostrarDropdownCalibre] = useState(false);
+  // Datos del producto nuevo (desde SelectorProducto)
+  const [datosProductoNuevo, setDatosProductoNuevo] = useState<DatosProducto>({
+    tipoProducto: "",
+    material: "",
+    calibre: "",
+    medidas: {
+      altura: "",
+      ancho: "",
+      fuelleFondo: "",
+      fuelleLateral1: "",
+      fuelleLateral2: "",
+      refuerzo: "",
+      solapa: "",
+    },
+    medidasFormateadas: "",
+    nombreCompleto: "",
+  });
+
   const [mostrarDropdownCaras, setMostrarDropdownCaras] = useState(false);
 
   /* FUNCIÓN PARA NORMALIZAR TEXTO (QUITAR ACENTOS) */
@@ -171,40 +262,38 @@ export default function CrearPedido({
     );
   });
 
-  // Inputs del producto
-  const handleProductoChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
+  // Seleccionar producto registrado
+  const seleccionarProductoRegistrado = (productoReg: ProductoRegistrado) => {
+    setProductoRegistradoSeleccionado(productoReg.nombreCompleto);
+    
+    setProductoActual({
+      nombre: productoReg.nombreCompleto,
+      cantidades: [0, 0, 0],
+      precios: [0, 0, 0],
+      calibre: productoReg.calibre,
+      tintas: 1,
+      caras: 1,
+      material: productoReg.material,
+      medidas: { ...productoReg.medidas },
+      medidasFormateadas: productoReg.medidasFormateadas,
+    });
+    
+    setMostrarDropdownProductosRegistrados(false);
+  };
 
-    if (name === "tintas") {
-      if (value === "") {
-        setProductoActual({
-          ...productoActual,
-          [name]: "" as any,
-        });
-      } else {
-        setProductoActual({
-          ...productoActual,
-          [name]: Number(value),
-        });
-      }
-    } else {
-      setProductoActual({
-        ...productoActual,
-        [name]: value,
-      });
-
-      // Si es el nombre del producto, filtrar lista sin acentos
-      if (name === "nombre") {
-        const valorNormalizado = normalizarTexto(value);
-        const filtered = PRODUCTOS_DISPONIBLES.filter((p) =>
-          normalizarTexto(p).includes(valorNormalizado)
-        );
-        setProductosFiltrados(filtered);
-        setMostrarDropdown(value.length > 0);
-      }
-    }
+  // Manejar cambios del producto nuevo desde SelectorProducto
+  const handleProductoNuevoChange = (datos: DatosProducto) => {
+    setDatosProductoNuevo(datos);
+    
+    // Actualizar productoActual con los datos del nuevo producto
+    setProductoActual((prev) => ({
+      ...prev,
+      nombre: datos.nombreCompleto,
+      material: datos.material,
+      calibre: datos.calibre,
+      medidas: { ...datos.medidas },
+      medidasFormateadas: datos.medidasFormateadas,
+    }));
   };
 
   // Función para calcular precio por bolsa según cantidad
@@ -214,7 +303,6 @@ export default function CrearPedido({
     const BOLSAS_POR_KG = 88.652;
     const kilos = cantidad / BOLSAS_POR_KG;
     
-    // Tabla de precios por kilo según volumen
     let precioKg: number;
     if (kilos >= 1000) precioKg = 90;
     else if (kilos >= 500) precioKg = 90;
@@ -224,9 +312,8 @@ export default function CrearPedido({
     else if (kilos >= 75) precioKg = 180;
     else if (kilos >= 50) precioKg = 200;
     else if (kilos >= 30) precioKg = 250;
-    else precioKg = 250; // Menos de 30kg
+    else precioKg = 250;
     
-    // Calcular precio por bolsa
     const precioPorBolsa = precioKg / BOLSAS_POR_KG;
     return Number(precioPorBolsa.toFixed(4));
   };
@@ -237,13 +324,21 @@ export default function CrearPedido({
     
     const cantidad = value === "" ? 0 : Number(value);
     nuevasCantidades[index] = cantidad;
-    
-    // Calcular automáticamente el precio según la cantidad
     nuevosPrecios[index] = calcularPrecioPorBolsa(cantidad);
 
     setProductoActual({
       ...productoActual,
       cantidades: nuevasCantidades as [number, number, number],
+      precios: nuevosPrecios as [number, number, number],
+    });
+  };
+
+  const handlePrecioChange = (index: number, value: string) => {
+    const nuevosPrecios = [...productoActual.precios];
+    nuevosPrecios[index] = value === "" ? 0 : Number(value);
+
+    setProductoActual({
+      ...productoActual,
       precios: nuevosPrecios as [number, number, number],
     });
   };
@@ -259,6 +354,10 @@ export default function CrearPedido({
         productos: [...datos.productos, productoActual],
       });
 
+      // Resetear formulario
+      setModoProducto("registrado");
+      setProductoRegistradoSeleccionado("");
+      
       setProductoActual({
         nombre: "",
         cantidades: [0, 0, 0],
@@ -266,10 +365,35 @@ export default function CrearPedido({
         calibre: "200",
         tintas: 1,
         caras: 1,
+        material: "",
+        medidas: {
+          altura: "",
+          ancho: "",
+          fuelleFondo: "",
+          fuelleLateral1: "",
+          fuelleLateral2: "",
+          refuerzo: "",
+          solapa: "",
+        },
+        medidasFormateadas: "",
       });
 
-      setProductosFiltrados([]);
-      setMostrarDropdown(false);
+      setDatosProductoNuevo({
+        tipoProducto: "",
+        material: "",
+        calibre: "",
+        medidas: {
+          altura: "",
+          ancho: "",
+          fuelleFondo: "",
+          fuelleLateral1: "",
+          fuelleLateral2: "",
+          refuerzo: "",
+          solapa: "",
+        },
+        medidasFormateadas: "",
+        nombreCompleto: "",
+      });
     }
   };
 
@@ -317,7 +441,7 @@ export default function CrearPedido({
     <div className="relative">
       {/* Modal de búsqueda de clientes */}
       {mostrarModalClientes && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between mb-4">
@@ -527,90 +651,57 @@ export default function CrearPedido({
           Agregar Productos
         </h3>
 
-        {/* Formulario de producto */}
-        <div className="bg-gray-50 p-4 rounded-lg mb-4 relative">
-          <div className="space-y-3">
-            {/* Producto */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Producto
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="nombre"
-                  value={productoActual.nombre}
-                  onChange={handleProductoChange}
-                  placeholder="Escribe para buscar..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                  autoComplete="off"
-                  onFocus={() => {
-                    if (productoActual.nombre) {
-                      setMostrarDropdown(true);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMostrarDropdown(!mostrarDropdown);
-                    if (!mostrarDropdown) {
-                      setProductosFiltrados(PRODUCTOS_DISPONIBLES);
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                >
-                  <svg 
-                    className={`w-5 h-5 transition-transform ${mostrarDropdown ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              {/* Lista de sugerencias */}
-              {mostrarDropdown && productosFiltrados.length > 0 && (
-                <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                  {productosFiltrados.map((p, index) => (
-                    <li
-                      key={index}
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setProductoActual({ ...productoActual, nombre: p });
-                        setProductosFiltrados([]);
-                        setMostrarDropdown(false);
-                      }}
-                    >
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+        {/* Selector de modo */}
+        <div className="mb-6 flex gap-4 bg-gray-100 p-1 rounded-lg w-fit">
+          <button
+            type="button"
+            onClick={() => setModoProducto("registrado")}
+            className={`px-6 py-2 rounded-md font-medium transition-all ${
+              modoProducto === "registrado"
+                ? "bg-white text-blue-600 shadow"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Producto Registrado
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoProducto("nuevo")}
+            className={`px-6 py-2 rounded-md font-medium transition-all ${
+              modoProducto === "nuevo"
+                ? "bg-white text-blue-600 shadow"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Producto Nuevo
+          </button>
+        </div>
 
-            {/* Calibre y Cantidad */}
-            <div className="grid grid-cols-2 gap-3">
+        {/* Formulario de producto */}
+        <div className="bg-gray-50 p-6 rounded-lg mb-4 relative">
+          {/* MODO: PRODUCTO REGISTRADO */}
+          {modoProducto === "registrado" && (
+            <div className="space-y-4">
               <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Calibre
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seleccionar Producto
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={productoActual.calibre}
+                    value={productoRegistradoSeleccionado}
                     readOnly
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
-                    onClick={() => setMostrarDropdownCalibre(!mostrarDropdownCalibre)}
+                    placeholder="Selecciona un producto registrado"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
+                    onClick={() => setMostrarDropdownProductosRegistrados(!mostrarDropdownProductosRegistrados)}
                   />
                   <button
                     type="button"
-                    onClick={() => setMostrarDropdownCalibre(!mostrarDropdownCalibre)}
+                    onClick={() => setMostrarDropdownProductosRegistrados(!mostrarDropdownProductosRegistrados)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
                   >
                     <svg 
-                      className={`w-5 h-5 transition-transform ${mostrarDropdownCalibre ? 'rotate-180' : ''}`}
+                      className={`w-5 h-5 transition-transform ${mostrarDropdownProductosRegistrados ? 'rotate-180' : ''}`}
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24"
@@ -619,29 +710,131 @@ export default function CrearPedido({
                     </svg>
                   </button>
                 </div>
-                {mostrarDropdownCalibre && (
-                  <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                    {CALIBRES.map((calibre) => (
+                
+                {mostrarDropdownProductosRegistrados && (
+                  <ul className="absolute w-full bg-white border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg shadow-lg z-20">
+                    {PRODUCTOS_REGISTRADOS.map((prod) => (
                       <li
-                        key={calibre}
-                        className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                        onClick={() => {
-                          setProductoActual({ ...productoActual, calibre });
-                          setMostrarDropdownCalibre(false);
-                        }}
+                        key={prod.id}
+                        onClick={() => seleccionarProductoRegistrado(prod)}
+                        className="px-4 py-3 hover:bg-blue-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                       >
-                        {calibre}
+                        <p className="font-medium text-gray-900">{prod.nombreCompleto}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {prod.tipoProducto} • {prod.material} • Calibre {prod.calibre}
+                        </p>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
 
+              {productoRegistradoSeleccionado && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Material:</span> {productoActual.material}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Calibre:</span> {productoActual.calibre}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Medidas:</span> {productoActual.medidasFormateadas}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MODO: PRODUCTO NUEVO - Reutiliza SelectorProducto */}
+          {modoProducto === "nuevo" && (
+            <SelectorProducto
+              onProductoChange={handleProductoNuevoChange}
+              mostrarFigura={true}
+            />
+          )}
+
+          {/* Campos comunes para ambos modos */}
+          {(productoRegistradoSeleccionado || datosProductoNuevo.nombreCompleto) && (
+            <div className="mt-6 space-y-4 border-t pt-4">
+              {/* Tintas y Caras */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tintas
+                  </label>
+                  <input
+                    type="number"
+                    value={productoActual.tintas}
+                    onChange={(e) =>
+                      setProductoActual({
+                        ...productoActual,
+                        tintas: Number(e.target.value),
+                      })
+                    }
+                    min="1"
+                    max="8"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
+                  />
+                </div>
+
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Caras
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={`${productoActual.caras} cara${productoActual.caras > 1 ? 's' : ''}`}
+                      readOnly
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
+                      onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      <svg 
+                        className={`w-5 h-5 transition-transform ${mostrarDropdownCaras ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                  {mostrarDropdownCaras && (
+                    <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
+                      <li
+                        onClick={() => {
+                          setProductoActual({ ...productoActual, caras: 1 });
+                          setMostrarDropdownCaras(false);
+                        }}
+                        className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
+                      >
+                        1 cara
+                      </li>
+                      <li
+                        onClick={() => {
+                          setProductoActual({ ...productoActual, caras: 2 });
+                          setMostrarDropdownCaras(false);
+                        }}
+                        className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
+                      >
+                        2 caras
+                      </li>
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* Cantidades */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Cantidades
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   {productoActual.cantidades.map((cantidad, index) => (
                     <input
                       key={index}
@@ -649,117 +842,50 @@ export default function CrearPedido({
                       min="0"
                       value={cantidad === 0 ? "" : cantidad}
                       onChange={(e) => handleCantidadChange(index, e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                      placeholder={`Cant. ${index + 1}`}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
+                      placeholder={`Cantidad ${index + 1}`}
                     />
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Tintas y Caras */}
-            <div className="grid grid-cols-2 gap-3">
+              {/* Precios */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tintas
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Precios unitarios (calculados automáticamente)
                 </label>
-                <input
-                  type="number"
-                  name="tintas"
-                  value={productoActual.tintas}
-                  onChange={handleProductoChange}
-                  min="1"
-                  max="8"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                  placeholder="0"
-                />
-              </div>
-
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Caras
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={`${productoActual.caras} cara${productoActual.caras > 1 ? 's' : ''}`}
-                    readOnly
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
-                    onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                  >
-                    <svg 
-                      className={`w-5 h-5 transition-transform ${mostrarDropdownCaras ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                <div className="grid grid-cols-3 gap-3">
+                  {productoActual.precios.map((precio, index) => (
+                    <div key={index} className="relative">
+                      <input
+                        type="text"
+                        value={precio === 0 ? "" : `$${precio.toFixed(4)}`}
+                        onChange={(e) => {
+                          const value = e.target.value.replace('$', '');
+                          handlePrecioChange(index, value);
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
+                        placeholder="Auto"
+                      />
+                      {productoActual.cantidades[index] > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {(productoActual.cantidades[index] / 88.652).toFixed(2)} kg
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                {mostrarDropdownCaras && (
-                  <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                    <li
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setProductoActual({ ...productoActual, caras: 1 });
-                        setMostrarDropdownCaras(false);
-                      }}
-                    >
-                      1 cara
-                    </li>
-                    <li
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setProductoActual({ ...productoActual, caras: 2 });
-                        setMostrarDropdownCaras(false);
-                      }}
-                    >
-                      2 caras
-                    </li>
-                  </ul>
-                )}
               </div>
-            </div>
 
-            {/* Precio */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Precios unitarios (calculados automáticamente)
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {productoActual.precios.map((precio, index) => (
-                  <div key={index} className="relative">
-                    <input
-                      type="text"
-                      value={precio === 0 ? "" : `${precio.toFixed(4)}`}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-gray-100 cursor-not-allowed"
-                      placeholder="Auto"
-                    />
-                    {productoActual.cantidades[index] > 0 && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {(productoActual.cantidades[index] / 88.652).toFixed(2)} kg
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={handleAgregarProducto}
+                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+              >
+                + Agregar Producto
+              </button>
             </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleAgregarProducto}
-            className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            + Agregar Producto
-          </button>
+          )}
         </div>
 
         {/* Lista de productos */}
@@ -777,7 +903,7 @@ export default function CrearPedido({
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{prod.nombre}</p>
                     <p className="text-sm text-gray-500">
-                      Calibre: {prod.calibre} | Tintas: {prod.tintas} | Caras: {prod.caras}
+                      Material: {prod.material} | Calibre: {prod.calibre} | Tintas: {prod.tintas} | Caras: {prod.caras}
                     </p>
                     {prod.cantidades.map((cant, i) =>
                       cant > 0 ? (
@@ -806,40 +932,6 @@ export default function CrearPedido({
             </div>
           </div>
         )}
-
-        {/* Checkboxes de Aprobación */}
-        <div className="mb-4 bg-gray-50 p-4 rounded-lg">
-          <h4 className="text-sm font-semibold text-gray-700 mb-3">
-            Estado del Pedido
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="disenoAprobado"
-                checked={datos.disenoAprobado}
-                onChange={(e) => setDatos({ ...datos, disenoAprobado: e.target.checked })}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="disenoAprobado" className="ml-2 block text-sm font-medium text-gray-700">
-                Diseño Aprobado
-              </label>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="anticipoAprobado"
-                checked={datos.anticipoAprobado}
-                onChange={(e) => setDatos({ ...datos, anticipoAprobado: e.target.checked })}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="anticipoAprobado" className="ml-2 block text-sm font-medium text-gray-700">
-                Anticipo Pagado
-              </label>
-            </div>
-          </div>
-        </div>
 
         {/* Observaciones */}
         <div className="mb-4">

@@ -30,520 +30,267 @@ interface FormularioPedidoProps {
   onCancel: () => void;
 }
 
-const PRODUCTOS_DISPONIBLES = [
-  "Bolsa plana 30x40 baja densidad",
-  "Bolsa plana 40x50 baja densidad",
-  "Bolsa plana 50x60 baja densidad",
-  "Bolsa troquelada 30x40 alta densidad",
-  "Bolsa troquelada 40x50 alta densidad",
-  "Bolsa troquelada 50x60 alta densidad",
-  "Bolsa celofán 20x30 BOPP",
-  "Bolsa celofán 30x40 BOPP",
-  "Bolsa celofán 40x50 BOPP",
-  "Bolsa envíos 30x40 alta densidad",
-  "Bolsa envíos 40x50 alta densidad",
-  "Bolsa envíos 50x70 alta densidad",
-  "Bolsa asa flexible 30x40 alta densidad",
-  "Bolsa asa flexible 40x50 alta densidad",
-  "Bolsa asa flexible 50x60 alta densidad",
-  "Bobina alta densidad 30cm",
-  "Bobina alta densidad 50cm",
-  "Bobina baja densidad 40cm",
-  "Faldón BOPP 60x90",
-  "Faldón BOPP 80x120",
-  "Lámina BOPP 100x150",
-  "Lámina BOPP 120x180"
-];
-
-const CALIBRES = ["150", "175", "200", "225", "250", "275", "300", "325", "350", "375", "400"];
-
 export default function FormularioPedido({ 
   pedido, 
   onSave, 
   onCancel 
 }: FormularioPedidoProps) {
-  const [datos, setDatos] = useState<Pedido>(pedido);
-  
-  const [productoActual, setProductoActual] = useState<Producto>({
-    nombre: "",
-    cantidades: [0, 0, 0],
-    precios: [0, 0, 0],
-    calibre: "200",
-    tintas: 1,
-    caras: 1,
-  });
+  const [form, setForm] = useState<Pedido>(pedido);
 
-  const [productosFiltrados, setProductosFiltrados] = useState<string[]>([]);
-  const [mostrarDropdown, setMostrarDropdown] = useState(false);
-  const [mostrarDropdownCalibre, setMostrarDropdownCalibre] = useState(false);
-  const [mostrarDropdownCaras, setMostrarDropdownCaras] = useState(false);
-
-  /* FUNCIÓN PARA NORMALIZAR TEXTO (QUITAR ACENTOS) */
-  const normalizarTexto = (texto: string) => {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Inputs del producto
-  const handleProductoChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-
-    if (name === "tintas") {
-      if (value === "") {
-        setProductoActual({
-          ...productoActual,
-          [name]: "" as any,
-        });
-      } else {
-        setProductoActual({
-          ...productoActual,
-          [name]: Number(value),
-        });
-      }
-    } else {
-      setProductoActual({
-        ...productoActual,
-        [name]: value,
-      });
-
-      // Si es el nombre del producto, filtrar lista sin acentos
-      if (name === "nombre") {
-        const valorNormalizado = normalizarTexto(value);
-        const filtered = PRODUCTOS_DISPONIBLES.filter((p) =>
-          normalizarTexto(p).includes(valorNormalizado)
-        );
-        setProductosFiltrados(filtered);
-        setMostrarDropdown(value.length > 0);
-      }
-    }
+  const handleProductoChange = (indexProducto: number, field: keyof Producto, value: any) => {
+    const nuevosProductos = [...form.productos];
+    nuevosProductos[indexProducto] = {
+      ...nuevosProductos[indexProducto],
+      [field]: value
+    };
+    setForm({ ...form, productos: nuevosProductos });
   };
 
-  // Función para calcular precio por bolsa según cantidad
-  const calcularPrecioPorBolsa = (cantidad: number): number => {
-    if (cantidad === 0) return 0;
-    
-    const BOLSAS_POR_KG = 88.652;
-    const kilos = cantidad / BOLSAS_POR_KG;
-    
-    // Tabla de precios por kilo según volumen
-    let precioKg: number;
-    if (kilos >= 1000) precioKg = 90;
-    else if (kilos >= 500) precioKg = 90;
-    else if (kilos >= 300) precioKg = 95;
-    else if (kilos >= 200) precioKg = 120;
-    else if (kilos >= 100) precioKg = 150;
-    else if (kilos >= 75) precioKg = 180;
-    else if (kilos >= 50) precioKg = 200;
-    else if (kilos >= 30) precioKg = 250;
-    else precioKg = 250; // Menos de 30kg
-    
-    // Calcular precio por bolsa
-    const precioPorBolsa = precioKg / BOLSAS_POR_KG;
-    return Number(precioPorBolsa.toFixed(4));
-  };
-
-  const handleCantidadChange = (index: number, value: string) => {
-    const nuevasCantidades = [...productoActual.cantidades];
-    const nuevosPrecios = [...productoActual.precios];
-    
+  const handleCantidadChange = (indexProducto: number, indexCantidad: number, value: string) => {
+    const nuevosProductos = [...form.productos];
     const cantidad = value === "" ? 0 : Number(value);
-    nuevasCantidades[index] = cantidad;
+    const nuevasCantidades = [...nuevosProductos[indexProducto].cantidades];
+    nuevasCantidades[indexCantidad] = cantidad;
     
-    // Calcular automáticamente el precio según la cantidad
-    nuevosPrecios[index] = calcularPrecioPorBolsa(cantidad);
-
-    setProductoActual({
-      ...productoActual,
-      cantidades: nuevasCantidades as [number, number, number],
-      precios: nuevosPrecios as [number, number, number],
-    });
+    nuevosProductos[indexProducto] = {
+      ...nuevosProductos[indexProducto],
+      cantidades: nuevasCantidades as [number, number, number]
+    };
+    setForm({ ...form, productos: nuevosProductos });
   };
 
-  const handleAgregarProducto = () => {
-    const tieneValoresValidos = productoActual.cantidades.some(
-      (cant, i) => cant > 0 && productoActual.precios[i] > 0
-    );
-
-    if (productoActual.nombre && tieneValoresValidos) {
-      setDatos({
-        ...datos,
-        productos: [...datos.productos, productoActual],
-      });
-
-      setProductoActual({
-        nombre: "",
-        cantidades: [0, 0, 0],
-        precios: [0, 0, 0],
-        calibre: "200",
-        tintas: 1,
-        caras: 1,
-      });
-
-      setProductosFiltrados([]);
-      setMostrarDropdown(false);
-    }
+  const handlePrecioChange = (indexProducto: number, indexPrecio: number, value: string) => {
+    const nuevosProductos = [...form.productos];
+    const precio = value === "" ? 0 : Number(value);
+    const nuevosPrecios = [...nuevosProductos[indexProducto].precios];
+    nuevosPrecios[indexPrecio] = precio;
+    
+    nuevosProductos[indexProducto] = {
+      ...nuevosProductos[indexProducto],
+      precios: nuevosPrecios as [number, number, number]
+    };
+    setForm({ ...form, productos: nuevosProductos });
   };
 
-  const handleEliminarProducto = (index: number) => {
-    const nuevosProductos = datos.productos.filter((_, i) => i !== index);
-    const nuevoTotal = nuevosProductos.reduce((total, prod) => {
-      const subtotal = prod.cantidades.reduce(
-        (sum, cant, i) => sum + cant * prod.precios[i],
-        0
-      );
+  const handleGuardar = () => {
+    const totalActualizado = calcularTotalPedido();
+    onSave({ ...form, total: totalActualizado });
+  };
+
+  const calcularSubtotalPorCantidad = (producto: Producto, index: number) => {
+    const cantidad = Number(producto.cantidades[index]) || 0;
+    const precio = Number(producto.precios[index]) || 0;
+    return cantidad * precio;
+  };
+
+  const calcularTotalPedido = () => {
+    return form.productos.reduce((total, prod) => {
+      const subtotal = prod.cantidades.reduce((sum, cant, idx) => {
+        const precio = Number(prod.precios[idx]) || 0;
+        return sum + (cant * precio);
+      }, 0);
       return total + subtotal;
     }, 0);
-
-    setDatos({
-      ...datos,
-      productos: nuevosProductos,
-      total: nuevoTotal
-    });
-  };
-
-  const calcularTotal = () => {
-    return datos.productos.reduce((total, prod) => {
-      const subtotal = prod.cantidades.reduce(
-        (sum, cant, i) => sum + cant * prod.precios[i],
-        0
-      );
-      return total + subtotal;
-    }, 0);
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setDatos({ ...datos, [name]: value });
-  };
-
-  const handleSubmit = () => {
-    const totalActualizado = calcularTotal();
-    onSave({
-      ...datos,
-      total: totalActualizado
-    });
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">
-        Editar Productos
-      </h3>
-
-      {/* Formulario de producto */}
-      <div className="bg-gray-50 p-4 rounded-lg mb-4 relative">
-        <div className="space-y-3">
-          {/* Producto */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Producto
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                name="nombre"
-                value={productoActual.nombre}
-                onChange={handleProductoChange}
-                placeholder="Escribe para buscar..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                autoComplete="off"
-                onFocus={() => {
-                  if (productoActual.nombre) {
-                    setMostrarDropdown(true);
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setMostrarDropdown(!mostrarDropdown);
-                  if (!mostrarDropdown) {
-                    setProductosFiltrados(PRODUCTOS_DISPONIBLES);
-                  }
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-              >
-                <svg 
-                  className={`w-5 h-5 transition-transform ${mostrarDropdown ? 'rotate-180' : ''}`}
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-            {/* Lista de sugerencias */}
-            {mostrarDropdown && productosFiltrados.length > 0 && (
-              <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                {productosFiltrados.map((p, index) => (
-                  <li
-                    key={index}
-                    className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                    onClick={() => {
-                      setProductoActual({ ...productoActual, nombre: p });
-                      setProductosFiltrados([]);
-                      setMostrarDropdown(false);
-                    }}
-                  >
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Calibre y Cantidad */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Calibre
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={productoActual.calibre}
-                  readOnly
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
-                  onClick={() => setMostrarDropdownCalibre(!mostrarDropdownCalibre)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarDropdownCalibre(!mostrarDropdownCalibre)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                >
-                  <svg 
-                    className={`w-5 h-5 transition-transform ${mostrarDropdownCalibre ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              {mostrarDropdownCalibre && (
-                <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                  {CALIBRES.map((calibre) => (
-                    <li
-                      key={calibre}
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setProductoActual({ ...productoActual, calibre });
-                        setMostrarDropdownCalibre(false);
-                      }}
-                    >
-                      {calibre}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cantidades
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {productoActual.cantidades.map((cantidad, index) => (
-                  <input
-                    key={index}
-                    type="number"
-                    min="0"
-                    value={cantidad === 0 ? "" : cantidad}
-                    onChange={(e) => handleCantidadChange(index, e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                    placeholder={`Cant. ${index + 1}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Tintas y Caras */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tintas
-              </label>
-              <input
-                type="number"
-                name="tintas"
-                value={productoActual.tintas}
-                onChange={handleProductoChange}
-                min="1"
-                max="8"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                placeholder="0"
-              />
-            </div>
-
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Caras
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={`${productoActual.caras} cara${productoActual.caras > 1 ? 's' : ''}`}
-                  readOnly
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
-                  onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                >
-                  <svg 
-                    className={`w-5 h-5 transition-transform ${mostrarDropdownCaras ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              {mostrarDropdownCaras && (
-                <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                  <li
-                    className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                    onClick={() => {
-                      setProductoActual({ ...productoActual, caras: 1 });
-                      setMostrarDropdownCaras(false);
-                    }}
-                  >
-                    1 cara
-                  </li>
-                  <li
-                    className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                    onClick={() => {
-                      setProductoActual({ ...productoActual, caras: 2 });
-                      setMostrarDropdownCaras(false);
-                    }}
-                  >
-                    2 caras
-                  </li>
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {/* Precio */}
+    <div className="space-y-5">
+      {/* Información del Cliente */}
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <h3 className="text-sm font-bold text-blue-900 mb-3 uppercase tracking-wider">
+          Información del Cliente
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Precios unitarios (calculados automáticamente)
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {productoActual.precios.map((precio, index) => (
-                <div key={index} className="relative">
-                  <input
-                    type="text"
-                    value={precio === 0 ? "" : `${precio.toFixed(4)}`}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-gray-100 cursor-not-allowed"
-                    placeholder="Auto"
-                  />
-                  {productoActual.cantidades[index] > 0 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {(productoActual.cantidades[index] / 88.652).toFixed(2)} kg
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+            <input
+              type="text"
+              name="cliente"
+              value={form.cliente}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
+            <input
+              type="text"
+              name="empresa"
+              value={form.empresa}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+            <input
+              type="text"
+              name="telefono"
+              value={form.telefono}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded-md"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
+            <input
+              type="email"
+              name="correo"
+              value={form.correo}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded-md"
+            />
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={handleAgregarProducto}
-          className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
-          + Agregar Producto
-        </button>
       </div>
 
-      {/* Lista de productos */}
-      {datos.productos.length > 0 && (
-        <div className="mb-4">
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">
-            Productos agregados:
-          </h4>
-          <div className="space-y-2">
-            {datos.productos.map((prod, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200"
-              >
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{prod.nombre}</p>
-                  <p className="text-sm text-gray-500">
-                    Calibre: {prod.calibre} | Tintas: {prod.tintas} | Caras: {prod.caras}
-                  </p>
-                  {prod.cantidades.map((cant, i) =>
-                    cant > 0 ? (
-                      <p key={i} className="text-sm text-gray-600">
-                        {cant} x ${prod.precios[i].toFixed(2)} = $
-                        {(cant * prod.precios[i]).toFixed(2)}
-                      </p>
-                    ) : null
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleEliminarProducto(index)}
-                  className="text-red-600 hover:text-red-800 ml-4"
-                >
-                  ✕
-                </button>
+      {/* Productos con Edición */}
+      <div className="bg-white border-2 border-purple-200 rounded-lg">
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b border-purple-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
+                Productos del Pedido
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">
+                Edita las cantidades y precios de los productos
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-gray-500">Total Productos</div>
+              <div className="text-lg font-bold text-purple-600">
+                {form.productos.length}
               </div>
-            ))}
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-            <p className="text-lg font-bold text-gray-900">
-              Total: ${calcularTotal().toFixed(2)}
-            </p>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Checkboxes de Aprobación */}
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">
+        <div className="p-4">
+          <div className="space-y-4">
+            {form.productos.map((producto, indexProd) => {
+              return (
+                <div 
+                  key={indexProd} 
+                  className="bg-white p-4 rounded-lg border-2 border-gray-200"
+                >
+                  {/* Encabezado del Producto */}
+                  <div className="mb-3">
+                    <h4 className="font-semibold text-gray-900 text-lg">{producto.nombre}</h4>
+                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-500">Calibre:</span>
+                        <span className="ml-1 font-medium text-gray-900">{producto.calibre}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Tintas:</span>
+                        <span className="ml-1 font-medium text-gray-900">{producto.tintas}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Caras:</span>
+                        <span className="ml-1 font-medium text-gray-900">{producto.caras}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Opciones de Cantidades y Precios */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h5 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        Cantidades y Precios
+                      </h5>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {producto.cantidades.map((cantidad, indexCant) => {
+                        const subtotal = calcularSubtotalPorCantidad(producto, indexCant);
+                        
+                        return (
+                          <div
+                            key={indexCant}
+                            className="p-3 rounded-lg border-2 bg-white border-gray-300"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-600">
+                                Opción {indexCant + 1}
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              <div>
+                                <label className="text-xs text-gray-600 block mb-1">Cantidad:</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={cantidad === 0 ? "" : cantidad}
+                                  onChange={(e) => handleCantidadChange(indexProd, indexCant, e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-600 block mb-1">Precio c/u:</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={producto.precios[indexCant] === 0 ? "" : producto.precios[indexCant]}
+                                  onChange={(e) => handlePrecioChange(indexProd, indexCant, e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <div className="pt-2 border-t border-gray-200 mt-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-semibold text-gray-700">Subtotal:</span>
+                                  <span className="text-lg font-bold text-green-700">${subtotal.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Estado del Pedido */}
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <h4 className="text-sm font-bold text-blue-900 mb-3 uppercase tracking-wider">
           Estado del Pedido
         </h4>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex items-center bg-white p-3 rounded-lg border-2 border-gray-200">
             <input
               type="checkbox"
               id="disenoAprobado"
-              checked={datos.disenoAprobado}
-              onChange={(e) => setDatos({ ...datos, disenoAprobado: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              checked={form.disenoAprobado}
+              onChange={(e) => setForm({ ...form, disenoAprobado: e.target.checked })}
+              className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <label htmlFor="disenoAprobado" className="ml-2 block text-sm font-medium text-gray-700">
+            <label htmlFor="disenoAprobado" className="ml-3 block text-sm font-medium text-gray-900">
               Diseño Aprobado
             </label>
           </div>
 
-          <div className="flex items-center">
+          <div className="flex items-center bg-white p-3 rounded-lg border-2 border-gray-200">
             <input
               type="checkbox"
               id="anticipoAprobado"
-              checked={datos.anticipoAprobado}
-              onChange={(e) => setDatos({ ...datos, anticipoAprobado: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              checked={form.anticipoAprobado}
+              onChange={(e) => setForm({ ...form, anticipoAprobado: e.target.checked })}
+              className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <label htmlFor="anticipoAprobado" className="ml-2 block text-sm font-medium text-gray-700">
+            <label htmlFor="anticipoAprobado" className="ml-3 block text-sm font-medium text-gray-900">
               Anticipo Pagado
             </label>
           </div>
@@ -552,34 +299,46 @@ export default function FormularioPedido({
 
       {/* Observaciones */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Observaciones (Opcional)
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Observaciones</label>
         <textarea
           name="observaciones"
-          value={datos.observaciones}
-          onChange={handleInputChange}
+          value={form.observaciones}
+          onChange={handleChange}
           rows={3}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                    focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                    text-gray-900 bg-white placeholder-gray-400"
-          placeholder="Notas adicionales sobre el pedido..."
+          className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Agrega notas o comentarios adicionales..."
         />
       </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
-        <button
-          onClick={onCancel}
-          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleSubmit}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Guardar Cambios
-        </button>
+      {/* Resumen de Totales */}
+      <div className="bg-gray-50 p-5 rounded-lg border-2 border-gray-200">
+        <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">
+          Resumen de Totales
+        </h3>
+        <div className="space-y-2">
+          <div className="flex justify-between items-center pt-2">
+            <span className="text-gray-900 font-semibold text-lg">Total del Pedido:</span>
+            <span className="text-2xl font-bold text-gray-900">${calcularTotalPedido().toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Botones de Acción */}
+      <div className="flex flex-col gap-3 pt-4 border-t-2 border-gray-200">
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleGuardar}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold shadow-md"
+          >
+            Guardar Cambios
+          </button>
+        </div>
       </div>
     </div>
   );

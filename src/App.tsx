@@ -1,4 +1,6 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/authContext.tsx";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Usuarios from "./pages/Usuarios";
@@ -14,19 +16,106 @@ import Pedido from "./pages/Pedido";
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/usuarios" element={<Usuarios />} />
-        <Route path="/plastico" element={<Plastico />} />
-        <Route path="/cotizar" element={<Cotizar />} />
-        <Route path="/clientes" element={<Clientes />} />
-        <Route path="/precioplastico" element={<PrecioPlastico />} />
-        <Route path="/diseno" element={<Diseno />} />
-        <Route path="/anticipolicacion" element={<AnticipoLiquidacion />} />
-        <Route path="/seguimiento" element={<Seguimiento />} />
-        <Route path="/pedido" element={<Pedido />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          {/* Ruta pública - Login */}
+          <Route path="/" element={<Login />} />
+
+          {/* Rutas protegidas - Requieren autenticación */}
+          <Route
+            path="/home"
+            element={
+              <ProtectedRoute>
+                <Home />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/usuarios"
+            element={
+              <ProtectedRoute>
+                <Usuarios />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/plastico"
+            element={
+              <ProtectedRoute>
+                <Plastico />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/cotizar"
+            element={
+              <ProtectedRoute>
+                <Cotizar />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/clientes"
+            element={
+              <ProtectedRoute>
+                <Clientes />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/precioplastico"
+            element={
+              <ProtectedRoute>
+                <PrecioPlastico />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/diseno"
+            element={
+              <ProtectedRoute>
+                <Diseno />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/anticipolicacion"
+            element={
+              <ProtectedRoute>
+                <AnticipoLiquidacion />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/seguimiento"
+            element={
+              <ProtectedRoute>
+                <Seguimiento />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/pedido"
+            element={
+              <ProtectedRoute>
+                <Pedido />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Redirigir cualquier ruta no encontrada al login */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

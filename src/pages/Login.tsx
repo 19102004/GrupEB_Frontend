@@ -1,24 +1,49 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/authContext.tsx";
 import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
 
 export default function Login() {
   const [codigo, setCodigo] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const { login } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validación del código
     if (codigo.length < 4 || codigo.length > 5) {
       setError("El código debe tener entre 4 y 5 dígitos");
       return;
     }
 
     setError("");
-    navigate("/home"); 
+    setLoading(true);
+
+    try {
+      // Llamar al servicio de login
+      await login(codigo);
+      
+      // Si todo sale bien, redirigir a home
+      navigate("/home");
+    } catch (err: any) {
+      // Manejar errores
+      console.error("Error en login:", err);
+      
+      if (err.response?.status === 401) {
+        setError("Código incorrecto");
+      } else if (err.response?.data?.error) {
+        setError(err.response.data.error);
+      } else {
+        setError("Error al iniciar sesión. Intenta de nuevo.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,20 +84,24 @@ export default function Login() {
                   onChange={(e) =>
                     setCodigo(e.target.value.replace(/\D/g, ""))
                   }
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700"
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:border-blue-500 focus:outline-none"
                   required
+                  disabled={loading}
                 />
               </div>
 
               {error && (
-                <p className="text-sm text-red-400">{error}</p>
+                <p className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+                  {error}
+                </p>
               )}
 
               <button
                 type="submit"
-                className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
+                disabled={loading}
+                className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Entrar
+                {loading ? "Iniciando sesión..." : "Entrar"}
               </button>
             </form>
 
