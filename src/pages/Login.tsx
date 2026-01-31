@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/authContext.tsx";
+import { useAuth } from "../context/AuthContext.tsx";
 import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
 

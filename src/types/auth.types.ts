@@ -28,7 +28,7 @@ export interface RegisterRequest {
 // Tipo para el contexto de autenticación
 export interface AuthContextType {
   usuario: Usuario | null;
-  token: string | null;
+  token: null;
   isAuthenticated: boolean;
   login: (codigo: string) => Promise<void>;
   logout: () => void;

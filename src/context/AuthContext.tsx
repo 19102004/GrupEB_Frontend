@@ -1,19 +1,24 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { AuthContextType, Usuario } from "../types/auth.types";
-import { loginService, saveAuthData, getAuthData, clearAuthData } from "../services/authService";
+import {
+  loginService,
+  saveUsuario,
+  getUsuario,
+  clearUsuario,
+} from "../services/authService";
+import api from "../services/api";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Cargar sesión desde localStorage (solo usuario)
   useEffect(() => {
-    const { token: savedToken, usuario: savedUsuario } = getAuthData();
-    if (savedToken && savedUsuario) {
-      setToken(savedToken);
+    const savedUsuario = getUsuario();
+    if (savedUsuario) {
       setUsuario(savedUsuario);
     }
     setLoading(false);
@@ -22,30 +27,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (codigo: string) => {
     try {
       const data = await loginService(codigo);
-      
-      saveAuthData(data.token, data.usuario);
-      
-      setToken(data.token);
+
+      saveUsuario(data.usuario);
       setUsuario(data.usuario);
-    } catch (error: any) {
-      clearAuthData();
-      setToken(null);
+    } catch (error) {
+      clearUsuario();
       setUsuario(null);
-      
       throw error;
     }
   };
 
-  const logout = () => {
-    clearAuthData();
-    setToken(null);
+  const logout = async () => {
+    await api.post("/auth/logout");
+    clearUsuario();
     setUsuario(null);
   };
 
   const value = {
     usuario,
-    token,
-    isAuthenticated: !!token,
+    token: null, // ya no se usa, pero mantiene compatibilidad
+    isAuthenticated: !!usuario,
     login,
     logout,
     loading,

@@ -1,30 +1,26 @@
 import api from "./api";
-import type { LoginResponse, LoginRequest, RegisterRequest } from "../types/auth.types";
+import type { LoginResponse, RegisterRequest } from "../types/auth.types";
 
 export const loginService = async (codigo: string): Promise<LoginResponse> => {
-  const response = await api.post<LoginResponse>("/auth/login", { codigo } as LoginRequest);
+  const response = await api.post<LoginResponse>("/auth/login", { codigo });
   return response.data;
 };
 
-export const registerService = async (data: RegisterRequest): Promise<any> => {
+export const registerService = async (data: RegisterRequest) => {
   const response = await api.post("/auth/register", data);
   return response.data;
 };
 
-export const saveAuthData = (token: string, usuario: any) => {
-  localStorage.setItem("token", token);
+// 👉 SOLO guardamos usuario, NO token
+export const saveUsuario = (usuario: any) => {
   localStorage.setItem("usuario", JSON.stringify(usuario));
 };
 
-export const getAuthData = () => {
-  const token = localStorage.getItem("token");
+export const getUsuario = () => {
   const usuarioStr = localStorage.getItem("usuario");
-  const usuario = usuarioStr ? JSON.parse(usuarioStr) : null;
-  
-  return { token, usuario };
+  return usuarioStr ? JSON.parse(usuarioStr) : null;
 };
 
-export const clearAuthData = () => {
-  localStorage.removeItem("token");
+export const clearUsuario = () => {
   localStorage.removeItem("usuario");
 };
