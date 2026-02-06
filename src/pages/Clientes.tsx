@@ -1,103 +1,34 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioCliente from "../components/FormularioCliente";
-import EditarCliente from "../components/EditarCliente";
-import { useState } from "react";
-
-interface Cliente {
-  id: number;
-  numeroCliente: string;
-  nombreEmpresa: string;
-  atencionNombre: string;
-  impresion: string;
-  correo: string;
-  telefono: string;
-}
-
-interface ClienteCompleto extends Cliente {
-  razonSocial: string;
-  calle: string;
-  numero: string;
-  colonia: string;
-  codigoPostal: string;
-  celular: string;
-  poblacion: string;
-  estado: string;
-  rfc: string;
-  cfdi: string;
-  mailFacturacion: string;
-  metodoPago: string;
-  formaPago: string;
-  regimenFiscal: string;
-  moneda: string;
-}
-
-interface DatosCliente {
-  correo: string;
-  nombreEmpresa: string;
-  razonSocial: string;
-  atencionNombre: string;
-  impresion: string;
-  calle: string;
-  numero: string;
-  colonia: string;
-  codigoPostal: string;
-  telefono: string;
-  celular: string;
-  poblacion: string;
-  estado: string;
-  rfc: string;
-  cfdi: string;
-  mailFacturacion: string;
-  metodoPago: string;
-  formaPago: string;
-  regimenFiscal: string;
-  moneda: string;
-}
+import { useState, useEffect } from "react";
+import { getClientes, getClienteById, createCliente, updateCliente, deleteCliente } from "../services/clientesService";
+import type { Cliente } from "../types/clientes.types";
+import type { CreateClienteRequest, UpdateClienteRequest } from "../types/clientes.types";
 
 export default function Clientes() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalEditarOpen, setModalEditarOpen] = useState(false);
-  const [clienteEditando, setClienteEditando] = useState<ClienteCompleto | null>(null);
   const [busqueda, setBusqueda] = useState("");
-  const [clientes, setClientes] = useState<ClienteCompleto[]>([
-    { 
-      id: 1, numeroCliente: "CLI001", nombreEmpresa: "Imprenta Digital SA", atencionNombre: "Roberto Sánchez", 
-      impresion: "Offset", correo: "roberto@imprentadigital.com", telefono: "33-1111-2222",
-      razonSocial: "Imprenta Digital SA de CV", calle: "Av. Principal", numero: "123", colonia: "Centro",
-      codigoPostal: "44100", celular: "33-1111-2223", poblacion: "Guadalajara", estado: "Jalisco", 
-      rfc: "IMP010101ABC", cfdi: "G03", mailFacturacion: "facturacion@imprentadigital.com", 
-      metodoPago: "PUE", formaPago: "03", regimenFiscal: "601", moneda: "MXN"
-    },
-    { 
-      id: 2, numeroCliente: "CLI002", nombreEmpresa: "Papelería El Éxito", atencionNombre: "María Fernández", 
-      impresion: "Digital", correo: "maria@papeleriaexito.com", telefono: "33-2222-3333",
-      razonSocial: "", calle: "", numero: "", colonia: "", codigoPostal: "", celular: "", 
-      poblacion: "", estado: "", rfc: "", cfdi: "", mailFacturacion: "", metodoPago: "", 
-      formaPago: "", regimenFiscal: "", moneda: ""
-    },
-    { 
-      id: 3, numeroCliente: "CLI003", nombreEmpresa: "Corporativo Azteca", atencionNombre: "Jorge Ramírez", 
-      impresion: "Serigrafía", correo: "jorge@corpazteca.com", telefono: "33-3333-4444",
-      razonSocial: "", calle: "", numero: "", colonia: "", codigoPostal: "", celular: "", 
-      poblacion: "", estado: "", rfc: "", cfdi: "", mailFacturacion: "", metodoPago: "", 
-      formaPago: "", regimenFiscal: "", moneda: ""
-    },
-    { 
-      id: 4, numeroCliente: "CLI004", nombreEmpresa: "Diseños Modernos", atencionNombre: "Laura Mendoza", 
-      impresion: "Digital", correo: "laura@disenosmodernos.com", telefono: "33-4444-5555",
-      razonSocial: "", calle: "", numero: "", colonia: "", codigoPostal: "", celular: "", 
-      poblacion: "", estado: "", rfc: "", cfdi: "", mailFacturacion: "", metodoPago: "", 
-      formaPago: "", regimenFiscal: "", moneda: ""
-    },
-    { 
-      id: 5, numeroCliente: "CLI005", nombreEmpresa: "Publicidad Creativa", atencionNombre: "Carlos Ruiz", 
-      impresion: "Offset", correo: "carlos@pubcreativa.com", telefono: "33-5555-6666",
-      razonSocial: "", calle: "", numero: "", colonia: "", codigoPostal: "", celular: "", 
-      poblacion: "", estado: "", rfc: "", cfdi: "", mailFacturacion: "", metodoPago: "", 
-      formaPago: "", regimenFiscal: "", moneda: ""
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [clienteEditar, setClienteEditar] = useState<Cliente | null>(null);
+
+  useEffect(() => {
+    cargarClientes();
+  }, []);
+
+  const cargarClientes = async () => {
+    try {
+      setLoading(true);
+      const data = await getClientes();
+      setClientes(data);
+    } catch (error) {
+      console.error("Error al cargar clientes:", error);
+      alert("Error al cargar clientes");
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const normalizarTexto = (texto: string) => {
     return texto
@@ -114,89 +45,67 @@ export default function Clientes() {
     const terminoBusqueda = normalizarTexto(busqueda);
 
     return (
-      normalizarTexto(cliente.numeroCliente).includes(terminoBusqueda) ||
-      normalizarTexto(cliente.nombreEmpresa).includes(terminoBusqueda) ||
-      normalizarTexto(cliente.atencionNombre).includes(terminoBusqueda) ||
-      normalizarTexto(cliente.impresion).includes(terminoBusqueda) ||
+      normalizarTexto(cliente.empresa).includes(terminoBusqueda) ||
       normalizarTexto(cliente.correo).includes(terminoBusqueda) ||
-      normalizarTexto(cliente.telefono).includes(terminoBusqueda)
+      normalizarTexto(cliente.atencion || "").includes(terminoBusqueda) ||
+      normalizarTexto(cliente.impresion || "").includes(terminoBusqueda) ||
+      normalizarTexto(cliente.telefono || "").includes(terminoBusqueda) ||
+      normalizarTexto(cliente.rfc || "").includes(terminoBusqueda)
     );
   });
 
-  const handleEditar = (id: number) => {
-    const cliente = clientes.find(c => c.id === id);
-    if (cliente) {
-      setClienteEditando(cliente);
-      setModalEditarOpen(true);
+  const handleEditar = async (id: number) => {
+    try {
+      const cliente = await getClienteById(id);
+      setClienteEditar(cliente);
+      setModalOpen(true);
+    } catch (error) {
+      console.error("Error al cargar cliente:", error);
+      alert("Error al cargar datos del cliente");
     }
   };
 
-  const handleEliminar = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar este cliente?")) {
-      setClientes(clientes.filter(cliente => cliente.id !== id));
+  const handleEliminar = async (id: number) => {
+    if (!confirm("¿Estás seguro de eliminar este cliente?")) return;
+
+    try {
+      await deleteCliente(id);
+      await cargarClientes();
+      alert("Cliente eliminado exitosamente");
+    } catch (error) {
+      console.error("Error al eliminar cliente:", error);
+      alert("Error al eliminar cliente");
     }
   };
 
   const handleAgregarCliente = () => {
+    setClienteEditar(null);
     setModalOpen(true);
   };
 
-  const generarNumeroCliente = () => {
-    if (clientes.length === 0) return "CLI001";
-    
-    const ultimoNumero = Math.max(...clientes.map(c => {
-      const num = parseInt(c.numeroCliente.replace("CLI", ""));
-      return isNaN(num) ? 0 : num;
-    }));
-    
-    return `CLI${String(ultimoNumero + 1).padStart(3, "0")}`;
-  };
+  const handleSubmit = async (datos: CreateClienteRequest | UpdateClienteRequest) => {
+    try {
+      if (clienteEditar) {
+        await updateCliente(clienteEditar.idclientes, datos as UpdateClienteRequest);
+        alert("Cliente actualizado exitosamente");
+      } else {
+        await createCliente(datos as CreateClienteRequest);
+        alert("Cliente creado exitosamente");
+      }
 
-  const handleSubmit = (datos: DatosCliente) => {
-    const nuevoCliente: ClienteCompleto = {
-      id: clientes.length + 1,
-      numeroCliente: generarNumeroCliente(),
-      nombreEmpresa: datos.nombreEmpresa || "Sin especificar",
-      atencionNombre: datos.atencionNombre || "Sin especificar",
-      impresion: datos.impresion || "Sin especificar",
-      correo: datos.correo || "Sin especificar",
-      telefono: datos.telefono || "Sin especificar",
-      razonSocial: datos.razonSocial || "",
-      calle: datos.calle || "",
-      numero: datos.numero || "",
-      colonia: datos.colonia || "",
-      codigoPostal: datos.codigoPostal || "",
-      celular: datos.celular || "",
-      poblacion: datos.poblacion || "",
-      estado: datos.estado || "",
-      rfc: datos.rfc || "",
-      cfdi: datos.cfdi || "",
-      mailFacturacion: datos.mailFacturacion || "",
-      metodoPago: datos.metodoPago || "",
-      formaPago: datos.formaPago || "",
-      regimenFiscal: datos.regimenFiscal || "",
-      moneda: datos.moneda || ""
-    };
-
-    setClientes([...clientes, nuevoCliente]);
-    setModalOpen(false);
-  };
-
-  const handleEditarSubmit = (datos: ClienteCompleto) => {
-    setClientes(clientes.map(cliente => 
-      cliente.id === datos.id ? datos : cliente
-    ));
-    setModalEditarOpen(false);
-    setClienteEditando(null);
+      await cargarClientes();
+      setModalOpen(false);
+      setClienteEditar(null);
+    } catch (error: any) {
+      console.error("Error al guardar cliente:", error);
+      const mensaje = error.response?.data?.error || "Error al guardar cliente";
+      alert(mensaje);
+    }
   };
 
   const handleCancelar = () => {
     setModalOpen(false);
-  };
-
-  const handleCancelarEditar = () => {
-    setModalEditarOpen(false);
-    setClienteEditando(null);
+    setClienteEditar(null);
   };
 
   return (
@@ -204,7 +113,7 @@ export default function Clientes() {
       <h1 className="text-2xl font-bold mb-4">Clientes</h1>
 
       <p className="text-slate-400 mb-6">
-        Clientes registrados en el sistema GRUPEB.
+        Gestiona los clientes del sistema GRUPEB.
       </p>
 
       {/* BUSCADOR */}
@@ -214,7 +123,7 @@ export default function Clientes() {
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por número, empresa, atención, impresión, correo o teléfono..."
+            placeholder="Buscar por empresa, correo, atención, impresión, teléfono o RFC..."
             className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <svg
@@ -238,21 +147,16 @@ export default function Clientes() {
         )}
       </div>
 
+      {/* TABLA */}
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                N° Cliente
+                Empresa
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Nombre Empresa
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Atención Nombre
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Impresión
+                Atención
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Correo
@@ -261,42 +165,48 @@ export default function Clientes() {
                 Teléfono
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                RFC
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
               </th>
             </tr>
           </thead>
 
           <tbody className="bg-white divide-y divide-gray-200">
-            {clientesFiltrados.length > 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  Cargando clientes...
+                </td>
+              </tr>
+            ) : clientesFiltrados.length > 0 ? (
               clientesFiltrados.map((cliente) => (
-                <tr key={cliente.id} className="hover:bg-gray-50">
+                <tr key={cliente.idclientes} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {cliente.numeroCliente}
+                    {cliente.empresa}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cliente.nombreEmpresa}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cliente.atencionNombre}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cliente.impresion}
+                    {cliente.atencion || "—"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {cliente.correo}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cliente.telefono}
+                    {cliente.telefono || "—"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {cliente.rfc || "—"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
-                      onClick={() => handleEditar(cliente.id)}
+                      onClick={() => handleEditar(cliente.idclientes)}
                       className="text-blue-600 hover:text-blue-900 mr-4"
                     >
                       Editar
                     </button>
                     <button
-                      onClick={() => handleEliminar(cliente.id)}
+                      onClick={() => handleEliminar(cliente.idclientes)}
                       className="text-red-600 hover:text-red-900"
                     >
                       Eliminar
@@ -306,8 +216,10 @@ export default function Clientes() {
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                  No se encontraron clientes que coincidan con "{busqueda}"
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  {busqueda
+                    ? `No se encontraron clientes que coincidan con "${busqueda}"`
+                    : "No hay clientes registrados"}
                 </td>
               </tr>
             )}
@@ -315,6 +227,7 @@ export default function Clientes() {
         </table>
       </div>
 
+      {/* BOTÓN AGREGAR */}
       <div className="mt-6">
         <button
           onClick={handleAgregarCliente}
@@ -324,18 +237,17 @@ export default function Clientes() {
         </button>
       </div>
 
-      <Modal isOpen={modalOpen} onClose={handleCancelar} title="Nuevo Cliente">
-        <FormularioCliente onSubmit={handleSubmit} onCancel={handleCancelar} />
-      </Modal>
-
-      <Modal isOpen={modalEditarOpen} onClose={handleCancelarEditar} title="Editar Cliente">
-        {clienteEditando && (
-          <EditarCliente 
-            cliente={clienteEditando} 
-            onSubmit={handleEditarSubmit} 
-            onCancel={handleCancelarEditar} 
-          />
-        )}
+      {/* MODAL */}
+      <Modal
+        isOpen={modalOpen}
+        onClose={handleCancelar}
+        title={clienteEditar ? "Editar Cliente" : "Nuevo Cliente"}
+      >
+        <FormularioCliente
+          onSubmit={handleSubmit}
+          onCancel={handleCancelar}
+          clienteEditar={clienteEditar}
+        />
       </Modal>
     </Dashboard>
   );

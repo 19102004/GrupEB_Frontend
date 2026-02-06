@@ -1,167 +1,248 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getRegimenesFiscales, getMetodosPago, getFormasPago } from "../services/catalogosService";
+import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.types";
+import type { CreateClienteRequest, UpdateClienteRequest, Cliente } from "../types/clientes.types";
+
+// ✅ 10 Monedas más utilizadas en el mundo
+const MONEDAS = [
+  { codigo: "MXN", nombre: "Peso mexicano (MXN)" },
+  { codigo: "USD", nombre: "Dólar estadounidense (USD)" },
+  { codigo: "EUR", nombre: "Euro (EUR)" },
+  { codigo: "JPY", nombre: "Yen japonés (JPY)" },
+  { codigo: "GBP", nombre: "Libra esterlina (GBP)" },
+  { codigo: "CNY", nombre: "Yuan chino (CNY)" },
+  { codigo: "CAD", nombre: "Dólar canadiense (CAD)" },
+  { codigo: "CHF", nombre: "Franco suizo (CHF)" },
+  { codigo: "AUD", nombre: "Dólar australiano (AUD)" },
+  { codigo: "INR", nombre: "Rupia india (INR)" },
+];
 
 interface FormularioClienteProps {
-  onSubmit: (datos: DatosCliente) => void;
+  onSubmit: (datos: CreateClienteRequest | UpdateClienteRequest) => void;
   onCancel: () => void;
+  clienteEditar?: Cliente | null;
 }
-
-interface DatosCliente {
-  correo: string;
-  nombreEmpresa: string;
-  razonSocial: string;
-  atencionNombre: string;
-  impresion: string;
-  calle: string;
-  numero: string;
-  colonia: string;
-  codigoPostal: string;
-  telefono: string;
-  celular: string;
-  poblacion: string;
-  estado: string;
-  rfc: string;
-  cfdi: string;
-  mailFacturacion: string;
-  metodoPago: string;
-  formaPago: string;
-  regimenFiscal: string;
-  moneda: string;
-}
-
-const REGIMENES_FISCALES = [
-  "(622) Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras",
-  "(606) Arrendamiento",
-  "(624) Coordinados",
-  "(608) Demás ingresos",
-  "(601) General de Ley Personas Morales",
-  "(621) Incorporación Fiscal",
-  "(611) Ingresos por Dividendos (socios y accionistas)",
-  "(614) Ingresos por intereses",
-  "(623) Opcional para Grupos de Sociedades",
-  "(612) Personas Físicas con Actividades Empresariales y Profesionales",
-  "(603) Personas Morales con Fines no Lucrativos",
-  "(610) Residentes en el Extranjero sin Establecimiento Permanente en México",
-  "(626) Régimen Simplificado de Confianza",
-  "(607) Régimen de Enajenación o Adquisición de Bienes",
-  "(625) Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas",
-  "(615) Régimen de los ingresos por obtención de premios",
-  "(616) Sin obligaciones fiscales",
-  "(620) Sociedades Cooperativas de Producción que optan por diferir sus ingresos",
-  "(605) Sueldos y Salarios e Ingresos Asimilados a Salarios"
-];
-
-const METODOS_PAGO = [
-  "(01) Efectivo",
-  "(02) Cheque nominativo",
-  "(03) Transferencia electrónica de fondos",
-  "(04) Tarjeta de crédito",
-  "(05) Monedero electrónico",
-  "(06) Dinero electrónico",
-  "(08) Vales de despensa",
-  "(12) Dación en pago",
-  "(13) Pago por subrogación",
-  "(14) Pago por consignación",
-  "(15) Condonación",
-  "(17) Compensación",
-  "(23) Novación",
-  "(24) Confusión",
-  "(25) Remisión de deuda",
-  "(26) Prescripción o caducidad",
-  "(27) A satisfacción del acreedor",
-  "(28) Tarjeta de débito",
-  "(29) Tarjeta de servicios"
-];
-
-const FORMAS_PAGO = [
-  "(PUE) Pago en una sola exhibición",
-  "(PPD) Pago en parcialidades o diferido",
-  "(30) Aplicación de anticipos",
-  "(31) Intermediario pagos",
-  "(99) Por definir"
-];
 
 export default function FormularioCliente({
   onSubmit,
   onCancel,
+  clienteEditar,
 }: FormularioClienteProps) {
   const [paso, setPaso] = useState(1);
-  const [datos, setDatos] = useState<DatosCliente>({
-    correo: "",
-    nombreEmpresa: "",
-    razonSocial: "",
-    atencionNombre: "",
-    impresion: "",
-    calle: "",
-    numero: "",
-    colonia: "",
-    codigoPostal: "",
-    telefono: "",
-    celular: "",
-    poblacion: "",
-    estado: "",
-    rfc: "",
-    cfdi: "",
-    mailFacturacion: "",
-    metodoPago: "",
-    formaPago: "",
-    regimenFiscal: "",
-    moneda: "",
+  const [regimenesFiscales, setRegimenesFiscales] = useState<RegimenFiscal[]>([]);
+  const [metodosPago, setMetodosPago] = useState<MetodoPago[]>([]);
+  const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errores, setErrores] = useState<Record<string, string>>({});
+
+  const esEdicion = !!clienteEditar;
+
+  const [datos, setDatos] = useState<CreateClienteRequest | UpdateClienteRequest>({
+    empresa: clienteEditar?.empresa || "",
+    correo: clienteEditar?.correo || "",
+    telefono: clienteEditar?.telefono || "",
+    atencion: clienteEditar?.atencion || "",
+    razon_social: clienteEditar?.razon_social || "",
+    impresion: clienteEditar?.impresion || "",
+    celular: clienteEditar?.celular || "",
+    regimen_fiscal_idregimen_fiscal: clienteEditar?.regimen_fiscal_idregimen_fiscal || 0,
+    metodo_pago_idmetodo_pago: clienteEditar?.metodo_pago_idmetodo_pago || 0,
+    forma_pago_idforma_pago: clienteEditar?.forma_pago_idforma_pago || 0,
+    rfc: clienteEditar?.rfc || "",
+    correo_facturacion: clienteEditar?.correo_facturacion || "",
+    uso_cfdi: clienteEditar?.uso_cfdi || "",
+    moneda: clienteEditar?.moneda || "",
+    domicilio: clienteEditar?.domicilio || "",
+    numero: clienteEditar?.numero || "",
+    colonia: clienteEditar?.colonia || "",
+    codigo_postal: clienteEditar?.codigo_postal || "",
+    poblacion: clienteEditar?.poblacion || "",
+    estado: clienteEditar?.estado || "",
   });
 
-  const [dropdownRegimenAbierto, setDropdownRegimenAbierto] = useState(false);
-  const [dropdownMetodoAbierto, setDropdownMetodoAbierto] = useState(false);
-  const [dropdownFormaAbierto, setDropdownFormaAbierto] = useState(false);
+  useEffect(() => {
+    cargarDatos();
+  }, []);
 
-  const [regimenesFiltrados, setRegimenesFiltrados] = useState(REGIMENES_FISCALES);
-  const [metodosFiltrados, setMetodosFiltrados] = useState(METODOS_PAGO);
-  const [formasFiltradas, setFormasFiltradas] = useState(FORMAS_PAGO);
-
-  const normalizarTexto = (texto: string) => {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+  const cargarDatos = async () => {
+    try {
+      const [regimenesData, metodosData, formasData] = await Promise.all([
+        getRegimenesFiscales(),
+        getMetodosPago(),
+        getFormasPago(),
+      ]);
+      setRegimenesFiscales(regimenesData);
+      setMetodosPago(metodosData);
+      setFormasPago(formasData);
+    } catch (error) {
+      console.error("Error al cargar catálogos:", error);
+      alert("Error al cargar catálogos");
+    }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setDatos({ ...datos, [name]: value });
+  // ✅ VALIDACIONES PASO 1 (solo datos generales)
+  const validarPaso1 = (): boolean => {
+    const nuevosErrores: Record<string, string> = {};
 
-    // Filtrar opciones según el campo
-    if (name === "regimenFiscal") {
-      const filtrados = REGIMENES_FISCALES.filter(r =>
-        normalizarTexto(r).includes(normalizarTexto(value))
-      );
-      setRegimenesFiltrados(filtrados);
-      if (value) setDropdownRegimenAbierto(true);
-    } else if (name === "metodoPago") {
-      const filtrados = METODOS_PAGO.filter(m =>
-        normalizarTexto(m).includes(normalizarTexto(value))
-      );
-      setMetodosFiltrados(filtrados);
-      if (value) setDropdownMetodoAbierto(true);
-    } else if (name === "formaPago") {
-      const filtrados = FORMAS_PAGO.filter(f =>
-        normalizarTexto(f).includes(normalizarTexto(value))
-      );
-      setFormasFiltradas(filtrados);
-      if (value) setDropdownFormaAbierto(true);
+    // Validar empresa
+    if (!datos.empresa || datos.empresa.trim().length < 2) {
+      nuevosErrores.empresa = "La empresa debe tener al menos 2 caracteres";
+    } else if (datos.empresa.length > 128) {
+      nuevosErrores.empresa = "La empresa no puede exceder 128 caracteres";
+    }
+
+    // Validar correo
+    if (!datos.correo) {
+      nuevosErrores.correo = "El correo es requerido";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo)) {
+      nuevosErrores.correo = "El formato del correo no es válido";
+    }
+
+    // Validar teléfono (opcional)
+    if (datos.telefono && datos.telefono.trim() !== "") {
+      const telefonoLimpio = datos.telefono.replace(/\D/g, "");
+      if (telefonoLimpio.length < 10 || telefonoLimpio.length > 15) {
+        nuevosErrores.telefono = "El teléfono debe tener entre 10 y 15 dígitos";
+      }
+    }
+
+    // Validar celular (opcional)
+    if (datos.celular && datos.celular.trim() !== "") {
+      const celularLimpio = datos.celular.replace(/\D/g, "");
+      if (celularLimpio.length < 10 || celularLimpio.length > 15) {
+        nuevosErrores.celular = "El celular debe tener entre 10 y 15 dígitos";
+      }
+    }
+
+    // Validar código postal (opcional)
+    if (datos.codigo_postal && datos.codigo_postal.trim() !== "") {
+      if (!/^\d{5}$/.test(datos.codigo_postal)) {
+        nuevosErrores.codigo_postal = "El código postal debe tener 5 dígitos";
+      }
+    }
+
+    setErrores(nuevosErrores);
+    return Object.keys(nuevosErrores).length === 0;
+  };
+
+  // ✅ VALIDACIONES PASO 2 (datos de facturación)
+  const validarPaso2 = (): boolean => {
+    const nuevosErrores: Record<string, string> = {};
+
+    // Validar RFC (opcional)
+    if (datos.rfc && datos.rfc.trim() !== "") {
+      if (!/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(datos.rfc.toUpperCase())) {
+        nuevosErrores.rfc = "El formato del RFC no es válido";
+      }
+    }
+
+    // Validar correo de facturación (opcional)
+    if (datos.correo_facturacion && datos.correo_facturacion.trim() !== "") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo_facturacion)) {
+        nuevosErrores.correo_facturacion = "El formato del correo de facturación no es válido";
+      }
+    }
+
+    // Validar régimen fiscal
+    if (!datos.regimen_fiscal_idregimen_fiscal || datos.regimen_fiscal_idregimen_fiscal === 0) {
+      nuevosErrores.regimen_fiscal_idregimen_fiscal = "Debe seleccionar un régimen fiscal";
+    }
+
+    // Validar método de pago
+    if (!datos.metodo_pago_idmetodo_pago || datos.metodo_pago_idmetodo_pago === 0) {
+      nuevosErrores.metodo_pago_idmetodo_pago = "Debe seleccionar un método de pago";
+    }
+
+    // Validar forma de pago
+    if (!datos.forma_pago_idforma_pago || datos.forma_pago_idforma_pago === 0) {
+      nuevosErrores.forma_pago_idforma_pago = "Debe seleccionar una forma de pago";
+    }
+
+    setErrores(nuevosErrores);
+    return Object.keys(nuevosErrores).length === 0;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    // Solo hacer parseInt en los IDs de catálogos
+    const camposNumericos = [
+      'regimen_fiscal_idregimen_fiscal',
+      'metodo_pago_idmetodo_pago', 
+      'forma_pago_idforma_pago'
+    ];
+    
+    setDatos({ 
+      ...datos, 
+      [name]: camposNumericos.includes(name) ? parseInt(value) : value 
+    });
+
+    // Limpiar error del campo al editarlo
+    if (errores[name]) {
+      setErrores({ ...errores, [name]: "" });
     }
   };
 
   const handleSiguiente = () => {
+    if (!validarPaso1()) {
+      return;
+    }
+
     setPaso(2);
   };
 
   const handleAtras = () => setPaso(1);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(datos);
+
+    // Validar paso 2 antes de enviar
+    if (!validarPaso2()) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const datosFinales = { ...datos };
+
+      // Limpiar espacios
+      datosFinales.empresa = datosFinales.empresa.trim();
+      datosFinales.correo = datosFinales.correo.trim().toLowerCase();
+
+      // Limpiar teléfonos (solo números)
+      if (datosFinales.telefono) {
+        datosFinales.telefono = datosFinales.telefono.replace(/\D/g, "");
+      }
+      if (datosFinales.celular) {
+        datosFinales.celular = datosFinales.celular.replace(/\D/g, "");
+      }
+
+      // Limpiar RFC (mayúsculas)
+      if (datosFinales.rfc) {
+        datosFinales.rfc = datosFinales.rfc.trim().toUpperCase();
+      }
+
+      // Limpiar correo de facturación
+      if (datosFinales.correo_facturacion) {
+        datosFinales.correo_facturacion = datosFinales.correo_facturacion.trim().toLowerCase();
+      }
+
+      await onSubmit(datosFinales);
+    } catch (error: any) {
+      console.error("Error al guardar cliente:", error);
+
+      // Mostrar errores específicos del backend
+      if (error.response?.data?.error) {
+        alert(`Error: ${error.response.data.error}`);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit}>
       {/* Indicador de pasos */}
       <div className="flex items-center justify-center mb-8">
         <div className="flex items-center">
@@ -189,27 +270,71 @@ export default function FormularioCliente({
         </div>
       </div>
 
-      {/* PASO 1 - DATOS GENERALES */}
+      {/* PASO 1: Datos generales */}
       <div className={paso === 1 ? "block" : "hidden"}>
         <h3 className="text-lg font-semibold text-gray-900 mb-6">
-          Datos Generales
+          {esEdicion ? "Editar Cliente" : "Datos del Cliente"}
         </h3>
 
         <div className="space-y-4">
+          {/* Empresa y Correo */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nombre de Empresa
+                Nombre de Empresa *
               </label>
               <input
                 type="text"
-                name="nombreEmpresa"
-                value={datos.nombreEmpresa}
+                name="empresa"
+                value={datos.empresa}
+                onChange={handleInputChange}
+                className={`w-full px-4 py-2 border rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400
+                           ${errores.empresa ? "border-red-500" : "border-gray-300"}`}
+                placeholder="Empresa Ejemplo S.A."
+              />
+              {errores.empresa && (
+                <p className="mt-1 text-sm text-red-600">{errores.empresa}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Correo Electrónico *
+              </label>
+              <input
+                type="email"
+                name="correo"
+                value={datos.correo}
+                onChange={handleInputChange}
+                className={`w-full px-4 py-2 border rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400
+                           ${errores.correo ? "border-red-500" : "border-gray-300"}`}
+                placeholder="contacto@empresa.com"
+              />
+              {errores.correo && (
+                <p className="mt-1 text-sm text-red-600">{errores.correo}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Atención y Razón Social */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Atención (Nombre contacto)
+              </label>
+              <input
+                type="text"
+                name="atencion"
+                value={datos.atencion}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg
                            focus:ring-2 focus:ring-blue-500 focus:border-transparent
                            text-gray-900 bg-white placeholder-gray-400"
-                placeholder="Imprenta Digital SA"
+                placeholder="Juan Pérez"
               />
             </div>
 
@@ -219,113 +344,131 @@ export default function FormularioCliente({
               </label>
               <input
                 type="text"
-                name="razonSocial"
-                value={datos.razonSocial}
+                name="razon_social"
+                value={datos.razon_social}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg
                            focus:ring-2 focus:ring-blue-500 focus:border-transparent
                            text-gray-900 bg-white placeholder-gray-400"
-                placeholder="Imprenta Digital SA de CV"
+                placeholder="EMPRESA EJEMPLO SA DE CV"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Atención (Nombre)
-              </label>
-              <input
-                type="text"
-                name="atencionNombre"
-                value={datos.atencionNombre}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
-                placeholder="Roberto Sánchez"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Impresión
-              </label>
-              <input
-                type="text"
-                name="impresion"
-                value={datos.impresion}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
-                placeholder="Offset, Digital, Serigrafía..."
-              />
-            </div>
-          </div>
-
+          {/* Impresión */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Correo Electrónico
+              Impresión / Notas
             </label>
             <input
-              type="email"
-              name="correo"
-              value={datos.correo}
+              type="text"
+              name="impresion"
+              value={datos.impresion}
               onChange={handleInputChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg
                          focus:ring-2 focus:ring-blue-500 focus:border-transparent
                          text-gray-900 bg-white placeholder-gray-400"
-              placeholder="contacto@empresa.com"
+              placeholder="Offset, Digital, Serigrafía..."
             />
           </div>
 
+          {/* Teléfono y Celular */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Teléfono
+              </label>
+              <input
+                type="tel"
+                name="telefono"
+                value={datos.telefono}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "");
+                  setDatos({ ...datos, telefono: value });
+                  if (errores.telefono) {
+                    setErrores({ ...errores, telefono: "" });
+                  }
+                }}
+                maxLength={15}
+                className={`w-full px-4 py-2 border rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400
+                           ${errores.telefono ? "border-red-500" : "border-gray-300"}`}
+                placeholder="3312345678"
+              />
+              {errores.telefono && (
+                <p className="mt-1 text-sm text-red-600">{errores.telefono}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Celular
+              </label>
+              <input
+                type="tel"
+                name="celular"
+                value={datos.celular}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "");
+                  setDatos({ ...datos, celular: value });
+                  if (errores.celular) {
+                    setErrores({ ...errores, celular: "" });
+                  }
+                }}
+                maxLength={15}
+                className={`w-full px-4 py-2 border rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400
+                           ${errores.celular ? "border-red-500" : "border-gray-300"}`}
+                placeholder="3398765432"
+              />
+              {errores.celular && (
+                <p className="mt-1 text-sm text-red-600">{errores.celular}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Domicilio */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Domicilio
             </label>
             <div className="grid grid-cols-3 gap-4">
-              <div>
-                <input
-                  type="text"
-                  name="calle"
-                  value={datos.calle}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                             focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                             text-gray-900 bg-white placeholder-gray-400"
-                  placeholder="Calle"
-                />
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  name="numero"
-                  value={datos.numero}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                             focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                             text-gray-900 bg-white placeholder-gray-400"
-                  placeholder="# Número"
-                />
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  name="colonia"
-                  value={datos.colonia}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                             focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                             text-gray-900 bg-white placeholder-gray-400"
-                  placeholder="Colonia"
-                />
-              </div>
+              <input
+                type="text"
+                name="domicilio"
+                value={datos.domicilio}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400"
+                placeholder="Calle"
+              />
+              <input
+                type="text"
+                name="numero"
+                value={datos.numero}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400"
+                placeholder="Número"
+              />
+              <input
+                type="text"
+                name="colonia"
+                value={datos.colonia}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg
+                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           text-gray-900 bg-white placeholder-gray-400"
+                placeholder="Colonia"
+              />
             </div>
           </div>
 
+          {/* Código Postal, Población, Estado */}
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -333,14 +476,25 @@ export default function FormularioCliente({
               </label>
               <input
                 type="text"
-                name="codigoPostal"
-                value={datos.codigoPostal}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
+                name="codigo_postal"
+                value={datos.codigo_postal}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "");
+                  setDatos({ ...datos, codigo_postal: value });
+                  if (errores.codigo_postal) {
+                    setErrores({ ...errores, codigo_postal: "" });
+                  }
+                }}
+                maxLength={5}
+                className={`w-full px-4 py-2 border rounded-lg
                            focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
+                           text-gray-900 bg-white placeholder-gray-400
+                           ${errores.codigo_postal ? "border-red-500" : "border-gray-300"}`}
                 placeholder="44100"
               />
+              {errores.codigo_postal && (
+                <p className="mt-1 text-sm text-red-600">{errores.codigo_postal}</p>
+              )}
             </div>
 
             <div>
@@ -375,40 +529,6 @@ export default function FormularioCliente({
               />
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Teléfono
-              </label>
-              <input
-                type="tel"
-                name="telefono"
-                value={datos.telefono}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
-                placeholder="33-1234-5678"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Celular
-              </label>
-              <input
-                type="tel"
-                name="celular"
-                value={datos.celular}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
-                placeholder="33-9876-5432"
-              />
-            </div>
-          </div>
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
@@ -429,13 +549,14 @@ export default function FormularioCliente({
         </div>
       </div>
 
-      {/* PASO 2 - DATOS DE FACTURACIÓN */}
+      {/* PASO 2: Datos de facturación */}
       <div className={paso === 2 ? "block" : "hidden"}>
         <h3 className="text-lg font-semibold text-gray-900 mb-6">
           Datos de Facturación (SAT)
         </h3>
 
         <div className="space-y-4">
+          {/* RFC y Uso CFDI */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -445,239 +566,161 @@ export default function FormularioCliente({
                 type="text"
                 name="rfc"
                 value={datos.rfc}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
+                onChange={(e) => {
+                  const value = e.target.value.toUpperCase();
+                  setDatos({ ...datos, rfc: value });
+                  if (errores.rfc) {
+                    setErrores({ ...errores, rfc: "" });
+                  }
+                }}
+                maxLength={13}
+                className={`w-full px-4 py-2 border rounded-lg
                            focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
+                           text-gray-900 bg-white placeholder-gray-400
+                           ${errores.rfc ? "border-red-500" : "border-gray-300"}`}
                 placeholder="XAXX010101000"
               />
-            </div>
-
-            {/* Régimen Fiscal - Desplegable con búsqueda */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Régimen Fiscal
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="regimenFiscal"
-                  value={datos.regimenFiscal}
-                  onChange={handleInputChange}
-                  placeholder="Escribe para buscar..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                  autoComplete="off"
-                  onFocus={() => {
-                    if (datos.regimenFiscal) {
-                      setDropdownRegimenAbierto(true);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDropdownRegimenAbierto(!dropdownRegimenAbierto);
-                    if (!dropdownRegimenAbierto) {
-                      setRegimenesFiltrados(REGIMENES_FISCALES);
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                >
-                  <svg 
-                    className={`w-5 h-5 transition-transform ${dropdownRegimenAbierto ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              {dropdownRegimenAbierto && regimenesFiltrados.length > 0 && (
-                <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                  {regimenesFiltrados.map((r, index) => (
-                    <li
-                      key={index}
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setDatos({ ...datos, regimenFiscal: r });
-                        setDropdownRegimenAbierto(false);
-                      }}
-                    >
-                      {r}
-                    </li>
-                  ))}
-                </ul>
+              {errores.rfc && (
+                <p className="mt-1 text-sm text-red-600">{errores.rfc}</p>
               )}
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Mail de Facturación
-            </label>
-            <input
-              type="email"
-              name="mailFacturacion"
-              value={datos.mailFacturacion}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         text-gray-900 bg-white placeholder-gray-400"
-              placeholder="facturacion@empresa.com"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Uso de CFDI
               </label>
               <input
                 type="text"
-                name="cfdi"
-                value={datos.cfdi}
+                name="uso_cfdi"
+                value={datos.uso_cfdi}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg
                            focus:ring-2 focus:ring-blue-500 focus:border-transparent
                            text-gray-900 bg-white placeholder-gray-400"
-                placeholder="G03 - Gastos en general"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Moneda
-              </label>
-              <input
-                type="text"
-                name="moneda"
-                value={datos.moneda}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg
-                           focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                           text-gray-900 bg-white placeholder-gray-400"
-                placeholder="MXN, USD, EUR..."
+                placeholder="G03"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Método de Pago - Desplegable con búsqueda */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Método de Pago
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="metodoPago"
-                  value={datos.metodoPago}
-                  onChange={handleInputChange}
-                  placeholder="Escribe para buscar..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                  autoComplete="off"
-                  onFocus={() => {
-                    if (datos.metodoPago) {
-                      setDropdownMetodoAbierto(true);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDropdownMetodoAbierto(!dropdownMetodoAbierto);
-                    if (!dropdownMetodoAbierto) {
-                      setMetodosFiltrados(METODOS_PAGO);
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                >
-                  <svg 
-                    className={`w-5 h-5 transition-transform ${dropdownMetodoAbierto ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              {dropdownMetodoAbierto && metodosFiltrados.length > 0 && (
-                <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                  {metodosFiltrados.map((m, index) => (
-                    <li
-                      key={index}
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setDatos({ ...datos, metodoPago: m });
-                        setDropdownMetodoAbierto(false);
-                      }}
-                    >
-                      {m}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          {/* Correo de Facturación */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Correo de Facturación
+            </label>
+            <input
+              type="email"
+              name="correo_facturacion"
+              value={datos.correo_facturacion}
+              onChange={handleInputChange}
+              className={`w-full px-4 py-2 border rounded-lg
+                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         text-gray-900 bg-white placeholder-gray-400
+                         ${errores.correo_facturacion ? "border-red-500" : "border-gray-300"}`}
+              placeholder="facturacion@empresa.com"
+            />
+            {errores.correo_facturacion && (
+              <p className="mt-1 text-sm text-red-600">{errores.correo_facturacion}</p>
+            )}
+          </div>
 
-            {/* Forma de Pago - Desplegable con búsqueda */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Forma de Pago
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="formaPago"
-                  value={datos.formaPago}
-                  onChange={handleInputChange}
-                  placeholder="Escribe para buscar..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
-                  autoComplete="off"
-                  onFocus={() => {
-                    if (datos.formaPago) {
-                      setDropdownFormaAbierto(true);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDropdownFormaAbierto(!dropdownFormaAbierto);
-                    if (!dropdownFormaAbierto) {
-                      setFormasFiltradas(FORMAS_PAGO);
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                >
-                  <svg 
-                    className={`w-5 h-5 transition-transform ${dropdownFormaAbierto ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              {dropdownFormaAbierto && formasFiltradas.length > 0 && (
-                <ul className="border border-gray-300 mt-1 max-h-60 overflow-auto rounded-lg bg-white z-10 absolute w-full shadow-lg">
-                  {formasFiltradas.map((f, index) => (
-                    <li
-                      key={index}
-                      className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
-                      onClick={() => {
-                        setDatos({ ...datos, formaPago: f });
-                        setDropdownFormaAbierto(false);
-                      }}
-                    >
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          {/* Moneda */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Moneda
+            </label>
+            <select
+              name="moneda"
+              value={datos.moneda}
+              onChange={handleInputChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg
+                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         text-gray-900 bg-white"
+            >
+              <option value="">Seleccionar moneda...</option>
+              {MONEDAS.map((moneda) => (
+                <option key={moneda.codigo} value={moneda.codigo}>
+                  {moneda.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Régimen Fiscal */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Régimen Fiscal *
+            </label>
+            <select
+              name="regimen_fiscal_idregimen_fiscal"
+              value={datos.regimen_fiscal_idregimen_fiscal}
+              onChange={handleInputChange}
+              className={`w-full px-4 py-2 border rounded-lg
+                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         text-gray-900 bg-white
+                         ${errores.regimen_fiscal_idregimen_fiscal ? "border-red-500" : "border-gray-300"}`}
+            >
+              <option value={0}>Seleccionar régimen fiscal...</option>
+              {regimenesFiscales.map((regimen) => (
+                <option key={regimen.idregimen_fiscal} value={regimen.idregimen_fiscal}>
+                  ({regimen.codigo}) {regimen.tipo_regimen}
+                </option>
+              ))}
+            </select>
+            {errores.regimen_fiscal_idregimen_fiscal && (
+              <p className="mt-1 text-sm text-red-600">{errores.regimen_fiscal_idregimen_fiscal}</p>
+            )}
+          </div>
+
+          {/* Método de Pago */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Método de Pago *
+            </label>
+            <select
+              name="metodo_pago_idmetodo_pago"
+              value={datos.metodo_pago_idmetodo_pago}
+              onChange={handleInputChange}
+              className={`w-full px-4 py-2 border rounded-lg
+                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         text-gray-900 bg-white
+                         ${errores.metodo_pago_idmetodo_pago ? "border-red-500" : "border-gray-300"}`}
+            >
+              <option value={0}>Seleccionar método de pago...</option>
+              {metodosPago.map((metodo) => (
+                <option key={metodo.idmetodo_pago} value={metodo.idmetodo_pago}>
+                  ({metodo.codigo}) {metodo.tipo_pago}
+                </option>
+              ))}
+            </select>
+            {errores.metodo_pago_idmetodo_pago && (
+              <p className="mt-1 text-sm text-red-600">{errores.metodo_pago_idmetodo_pago}</p>
+            )}
+          </div>
+
+          {/* Forma de Pago */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Forma de Pago *
+            </label>
+            <select
+              name="forma_pago_idforma_pago"
+              value={datos.forma_pago_idforma_pago}
+              onChange={handleInputChange}
+              className={`w-full px-4 py-2 border rounded-lg
+                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         text-gray-900 bg-white
+                         ${errores.forma_pago_idforma_pago ? "border-red-500" : "border-gray-300"}`}
+            >
+              <option value={0}>Seleccionar forma de pago...</option>
+              {formasPago.map((forma) => (
+                <option key={forma.idforma_pago} value={forma.idforma_pago}>
+                  ({forma.codigo}) {forma.tipo_forma}
+                </option>
+              ))}
+            </select>
+            {errores.forma_pago_idforma_pago && (
+              <p className="mt-1 text-sm text-red-600">{errores.forma_pago_idforma_pago}</p>
+            )}
           </div>
         </div>
 
@@ -685,19 +728,20 @@ export default function FormularioCliente({
           <button
             type="button"
             onClick={handleAtras}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg"
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            disabled={loading}
           >
             Atrás
           </button>
           <button
-            type="button"
-            onClick={handleSubmit}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700"
+            type="submit"
+            className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
           >
-            Crear Cliente
+            {loading ? (esEdicion ? "Guardando..." : "Creando...") : (esEdicion ? "Guardar Cambios" : "Crear Cliente")}
           </button>
         </div>
       </div>
-    </div>
+    </form>
   );
 }

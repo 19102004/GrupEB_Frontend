@@ -1,6 +1,8 @@
+
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.tsx";
+import { useAuth } from "../context/AuthContext";
 import logo from "../assets/grupeblanco.png";
 import bolsas from "../assets/bolsas.png";
 
@@ -14,33 +16,26 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
 
-    // Validación del código
-    if (codigo.length < 4 || codigo.length > 5) {
-      setError("El código debe tener entre 4 y 5 dígitos");
+    console.log("🔵 Iniciando login con código:", codigo);
+
+    // Validación
+    if (codigo.length !== 5) {
+      setError("El código debe tener exactamente 5 dígitos");
       return;
     }
 
-    setError("");
     setLoading(true);
 
     try {
-      // Llamar al servicio de login
+      console.log("🔵 Llamando a login()...");
       await login(codigo);
-      
-      // Si todo sale bien, redirigir a home
+      console.log("✅ Login exitoso, navegando a /home");
       navigate("/home");
     } catch (err: any) {
-      // Manejar errores
-      console.error("Error en login:", err);
-      
-      if (err.response?.status === 401) {
-        setError("Código incorrecto");
-      } else if (err.response?.data?.error) {
-        setError(err.response.data.error);
-      } else {
-        setError("Error al iniciar sesión. Intenta de nuevo.");
-      }
+      console.error("❌ Error en login:", err);
+      setError(err.response?.data?.error || "Código incorrecto");
     } finally {
       setLoading(false);
     }
@@ -73,33 +68,33 @@ export default function Login() {
               {/* CÓDIGO */}
               <div>
                 <label className="block text-sm text-slate-300 mb-1">
-                  Código
+                  Código de acceso
                 </label>
                 <input
                   type="password"
                   value={codigo}
                   maxLength={5}
                   inputMode="numeric"
-                  placeholder="4 o 5 dígitos"
-                  onChange={(e) =>
-                    setCodigo(e.target.value.replace(/\D/g, ""))
-                  }
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:border-blue-500 focus:outline-none"
+                  placeholder="5 dígitos"
+                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:border-blue-500 focus:outline-none transition-colors"
                   required
                   disabled={loading}
+                  autoComplete="off"
                 />
               </div>
 
+              {/* MENSAJE DE ERROR */}
               {error && (
-                <p className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+                <div className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
                   {error}
-                </p>
+                </div>
               )}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Iniciando sesión..." : "Entrar"}
               </button>

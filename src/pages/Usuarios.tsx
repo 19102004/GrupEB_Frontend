@@ -1,49 +1,35 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioUsuario from "../components/FormularioUsuario";
-import { useState } from "react";
-
-interface Usuario {
-  id: number;
-  nombre: string;
-  puesto: string;
-  telefono: string;
-  codigo: string;
-  correo: string;
-}
-
-interface DatosUsuario {
-  correo: string;
-  nombre: string;
-  apellido: string;
-  codigo: string;
-  privilegios: {
-    crearUsuarios: boolean;
-    altaProductos: boolean;
-    cotizaciones: boolean;
-    pedidos: boolean;
-    produccion: boolean;
-    ventas: boolean;
-  };
-}
+import { useState, useEffect } from "react";
+import { getUsuarios, getUsuarioById, createUsuario, updateUsuario, deleteUsuario } from "../services/usuariosService";
+import type { Usuario } from "../types/usuario.types";
+import type { CreateUsuarioRequest, UpdateUsuarioRequest } from "../types/usuario.types";
 
 export default function Usuarios() {
   const [modalOpen, setModalOpen] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  const [usuarios, setUsuarios] = useState<Usuario[]>([
-    { id: 1, nombre: "Juan Pérez", puesto: "Gerente", telefono: "33-1234-5678", codigo: "USR001", correo: "juan@grupeb.com" },
-    { id: 2, nombre: "María García", puesto: "Contador", telefono: "33-2345-6789", codigo: "USR002", correo: "maria@grupeb.com" },
-    { id: 3, nombre: "Carlos López", puesto: "Vendedor", telefono: "33-3456-7890", codigo: "USR003", correo: "carlos@grupeb.com" },
-    { id: 4, nombre: "Ana Martínez", puesto: "Administrador", telefono: "33-4567-8901", codigo: "USR004", correo: "ana@grupeb.com" },
-    { id: 5, nombre: "Luis Rodríguez", puesto: "Almacenista", telefono: "33-5678-9012", codigo: "USR005", correo: "luis@grupeb.com" },
-    { id: 6, nombre: "Sofia Hernández", puesto: "Cajero", telefono: "33-6789-0123", codigo: "USR006", correo: "sofia@grupeb.com" },
-    { id: 7, nombre: "Pedro Ramírez", puesto: "Supervisor", telefono: "33-7890-1234", codigo: "USR007", correo: "pedro@grupeb.com" },
-    { id: 8, nombre: "Laura González", puesto: "Asistente", telefono: "33-8901-2345", codigo: "USR008", correo: "laura@grupeb.com" },
-    { id: 9, nombre: "Diego Torres", puesto: "Vendedor", telefono: "33-9012-3456", codigo: "USR009", correo: "diego@grupeb.com" },
-    { id: 10, nombre: "Carmen Flores", puesto: "Recepcionista", telefono: "33-0123-4567", codigo: "USR010", correo: "carmen@grupeb.com" }
-  ]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usuarioEditar, setUsuarioEditar] = useState<Usuario | null>(null);
 
-  /* FUNCIÓN PARA NORMALIZAR TEXTO (QUITAR ACENTOS, MAYÚSCULAS, PUNTOS, COMAS) */
+  useEffect(() => {
+    cargarUsuarios();
+  }, []);
+
+  const cargarUsuarios = async () => {
+    try {
+      setLoading(true);
+      const data = await getUsuarios();
+      setUsuarios(data);
+    } catch (error) {
+      console.error("Error al cargar usuarios:", error);
+      alert("Error al cargar usuarios");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const normalizarTexto = (texto: string) => {
     return texto
       .toLowerCase()
@@ -53,7 +39,6 @@ export default function Usuarios() {
       .trim();
   };
 
-  /* FILTRAR USUARIOS SEGÚN LA BÚSQUEDA */
   const usuariosFiltrados = usuarios.filter((usuario) => {
     if (!busqueda) return true;
 
@@ -61,43 +46,65 @@ export default function Usuarios() {
 
     return (
       normalizarTexto(usuario.nombre).includes(terminoBusqueda) ||
+      normalizarTexto(usuario.apellido).includes(terminoBusqueda) ||
       normalizarTexto(usuario.correo).includes(terminoBusqueda) ||
-      normalizarTexto(usuario.puesto).includes(terminoBusqueda) ||
-      normalizarTexto(usuario.telefono).includes(terminoBusqueda) ||
-      normalizarTexto(usuario.codigo).includes(terminoBusqueda)
+      normalizarTexto(usuario.telefono || "").includes(terminoBusqueda) ||
+      normalizarTexto(usuario.rol || "").includes(terminoBusqueda)
     );
   });
 
-  const handleEditar = (id: number) => {
-    console.log("Editar usuario:", id);
+  const handleEditar = async (id: number) => {
+    try {
+      const usuario = await getUsuarioById(id);
+      setUsuarioEditar(usuario);
+      setModalOpen(true);
+    } catch (error) {
+      console.error("Error al cargar usuario:", error);
+      alert("Error al cargar datos del usuario");
+    }
   };
 
-  const handleEliminar = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar este usuario?")) {
-      setUsuarios(usuarios.filter(usuario => usuario.id !== id));
+  const handleEliminar = async (id: number) => {
+    if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
+
+    try {
+      await deleteUsuario(id);
+      await cargarUsuarios();
+      alert("Usuario eliminado exitosamente");
+    } catch (error) {
+      console.error("Error al eliminar usuario:", error);
+      alert("Error al eliminar usuario");
     }
   };
 
   const handleAgregarUsuario = () => {
+    setUsuarioEditar(null);
     setModalOpen(true);
   };
 
-  const handleSubmit = (datos: DatosUsuario) => {
-    const nuevoUsuario: Usuario = {
-      id: usuarios.length + 1,
-      nombre: `${datos.nombre} ${datos.apellido}`,
-      puesto: "Sin asignar",
-      telefono: "Sin asignar",
-      codigo: datos.codigo,
-      correo: datos.correo
-    };
-
-    setUsuarios([...usuarios, nuevoUsuario]);
-    setModalOpen(false);
+  const handleSubmit = async (datos: CreateUsuarioRequest | UpdateUsuarioRequest) => {
+    try {
+      if (usuarioEditar) {
+        await updateUsuario(usuarioEditar.idusuario, datos as UpdateUsuarioRequest);
+        alert("Usuario actualizado exitosamente");
+      } else {
+        await createUsuario(datos as CreateUsuarioRequest);
+        alert("Usuario creado exitosamente");
+      }
+      
+      await cargarUsuarios();
+      setModalOpen(false);
+      setUsuarioEditar(null);
+    } catch (error: any) {
+      console.error("Error al guardar usuario:", error);
+      const mensaje = error.response?.data?.error || "Error al guardar usuario";
+      alert(mensaje);
+    }
   };
 
   const handleCancelar = () => {
     setModalOpen(false);
+    setUsuarioEditar(null);
   };
 
   return (
@@ -105,7 +112,7 @@ export default function Usuarios() {
       <h1 className="text-2xl font-bold mb-4">Usuarios</h1>
 
       <p className="text-slate-400 mb-6">
-        Usuarios existentes en el sistema GRUPEB.
+        Gestiona los usuarios del sistema GRUPEB.
       </p>
 
       {/* BUSCADOR */}
@@ -115,7 +122,7 @@ export default function Usuarios() {
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por nombre, correo, puesto, teléfono o código..."
+            placeholder="Buscar por nombre, apellido, correo, teléfono o rol..."
             className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <svg
@@ -139,6 +146,7 @@ export default function Usuarios() {
         )}
       </div>
 
+      {/* TABLA */}
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -147,16 +155,16 @@ export default function Usuarios() {
                 Nombre
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Correo
+                Apellido
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Puesto
+                Correo
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Teléfono
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Código
+                Rol
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
@@ -165,33 +173,47 @@ export default function Usuarios() {
           </thead>
 
           <tbody className="bg-white divide-y divide-gray-200">
-            {usuariosFiltrados.length > 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  Cargando usuarios...
+                </td>
+              </tr>
+            ) : usuariosFiltrados.length > 0 ? (
               usuariosFiltrados.map((usuario) => (
-                <tr key={usuario.id} className="hover:bg-gray-50">
+                <tr key={usuario.idusuario} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {usuario.nombre}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {usuario.apellido}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {usuario.correo}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {usuario.puesto}
+                    {usuario.telefono || "—"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {usuario.telefono}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {usuario.codigo}
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        usuario.acceso_total
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}
+                    >
+                      {usuario.rol || "Usuario"}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
-                      onClick={() => handleEditar(usuario.id)}
+                      onClick={() => handleEditar(usuario.idusuario)}
                       className="text-blue-600 hover:text-blue-900 mr-4"
                     >
                       Editar
                     </button>
                     <button
-                      onClick={() => handleEliminar(usuario.id)}
+                      onClick={() => handleEliminar(usuario.idusuario)}
                       className="text-red-600 hover:text-red-900"
                     >
                       Eliminar
@@ -202,7 +224,9 @@ export default function Usuarios() {
             ) : (
               <tr>
                 <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                  No se encontraron usuarios que coincidan con "{busqueda}"
+                  {busqueda
+                    ? `No se encontraron usuarios que coincidan con "${busqueda}"`
+                    : "No hay usuarios registrados"}
                 </td>
               </tr>
             )}
@@ -210,6 +234,7 @@ export default function Usuarios() {
         </table>
       </div>
 
+      {/* BOTÓN AGREGAR */}
       <div className="mt-6">
         <button
           onClick={handleAgregarUsuario}
@@ -219,8 +244,17 @@ export default function Usuarios() {
         </button>
       </div>
 
-      <Modal isOpen={modalOpen} onClose={handleCancelar} title="Nuevo Usuario">
-        <FormularioUsuario onSubmit={handleSubmit} onCancel={handleCancelar} />
+      {/* MODAL */}
+      <Modal 
+        isOpen={modalOpen} 
+        onClose={handleCancelar} 
+        title={usuarioEditar ? "Editar Usuario" : "Nuevo Usuario"}
+      >
+        <FormularioUsuario 
+          onSubmit={handleSubmit} 
+          onCancel={handleCancelar}
+          usuarioEditar={usuarioEditar}
+        />
       </Modal>
     </Dashboard>
   );
