@@ -7,6 +7,7 @@ export interface DetalleCotizacion {
   iddetalle: number;
   cantidad: number;
   precio_total: number;
+  aprobado: boolean | null;  // 🔥 NUEVO: null=pendiente, true=aprobado, false=rechazado
 }
 
 // ============================================================
@@ -14,6 +15,7 @@ export interface DetalleCotizacion {
 // ============================================================
 export interface ProductoCotizacion {
   idcotizacion: number;
+  idcotizacion_producto: number;  // 🔥 Agregado para aprobar
   producto_id: number;
   nombre: string;
   medida: string;
@@ -22,6 +24,7 @@ export interface ProductoCotizacion {
   por_kilo: string;
   tintas: number;
   caras: number;
+  observacion?: string;  // 🔥 NUEVO
   detalles: DetalleCotizacion[];
   subtotal: number;
 }
@@ -44,7 +47,7 @@ export interface Cotizacion {
 }
 
 // ============================================================
-// TIPOS PARA CREAR COTIZACIÓN (basados en el service)
+// TIPOS PARA CREAR COTIZACIÓN
 // ============================================================
 export interface ProductoCrearCotizacion {
   productoId?: number;
@@ -52,6 +55,7 @@ export interface ProductoCrearCotizacion {
   precios: [number, number, number];
   tintasId: number;
   carasId: number;
+  observacion?: string;  // 🔥 NUEVO
   [key: string]: any;
 }
 
@@ -70,6 +74,7 @@ export interface ProductoEnviarCotizacion {
   productoId: number;
   tintasId: number;
   carasId: number;
+  observacion?: string;  // 🔥 NUEVO
   detalles: DetalleCrearCotizacion[];
 }
 

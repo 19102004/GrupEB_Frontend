@@ -3,11 +3,11 @@ import SelectorProducto from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
 import { searchClientes, createClienteLigero } from "../services/clientesService";
 import { searchProductosPlastico, crearOObtenerProducto } from "../services/productosPlasticoService";
-import { getCatalogosProduccion, getTarifasProduccion } from "../services/catalogosProduccionService"; // ✅ AGREGADO getTarifasProduccion
-import { calcularPrecioUnitario } from "../utils/calculosProduccion"; // ✅ AGREGADO calcularPrecioUnitario
+import { getCatalogosProduccion } from "../services/catalogosProduccionService";
+import { usePreciosBatch } from "../hooks/usePrecioCalculado"; // 🔥 NUEVO
 import type { ClienteBusqueda } from "../types/clientes.types";
 import type { ProductoBusqueda, ProductoPlasticoCreate } from "../types/productos-plastico.types";
-import type { Cara, Tinta, TarifaProduccion } from "../types/catalogos-produccion.types"; // ✅ AGREGADO TarifaProduccion
+import type { Cara, Tinta } from "../types/catalogos-produccion.types";
 
 interface FormularioCotizacionProps {
   onSubmit: (datos: DatosCotizacion) => void;
@@ -33,6 +33,7 @@ interface Producto {
   medidas: Record<MedidaKey, string>;
   medidasFormateadas: string;
   porKilo?: string;
+  observacion?: string;  // 🔥 NUEVO
 }
 
 interface DatosCotizacion {
@@ -61,12 +62,10 @@ export default function FormularioCotizacion({
   });
 
   // ====================================
-  // ✅ ESTADOS PARA CATÁLOGOS Y TARIFAS
+  // ESTADOS PARA CATÁLOGOS
   // ====================================
   const [caras, setCaras] = useState<Cara[]>([]);
   const [tintas, setTintas] = useState<Tinta[]>([]);
-  const [tarifas, setTarifas] = useState<TarifaProduccion[]>([]); // ✅ NUEVO
-  const [loadingCatalogos, setLoadingCatalogos] = useState(false);
 
   // ====================================
   // ESTADOS PARA CLIENTES
@@ -112,6 +111,7 @@ export default function FormularioCotizacion({
       solapa: "",
     },
     medidasFormateadas: "",
+    observacion: "",  // 🔥 NUEVO
   });
 
   const [datosProductoNuevo, setDatosProductoNuevo] = useState<DatosProducto>({
@@ -135,33 +135,52 @@ export default function FormularioCotizacion({
   });
 
   // ====================================
-  // ✅ CARGAR CATÁLOGOS Y TARIFAS AL MONTAR
+  // 🔥 HOOK PARA CALCULAR PRECIOS CON DEBOUNCE
+  // ====================================
+  const { resultados, loading: calculandoPrecios, error: errorCalculo } = usePreciosBatch({
+    cantidades: productoActual.cantidades,
+    porKilo: productoActual.porKilo,
+    tintasId: productoActual.tintasId,
+    carasId: productoActual.carasId,
+    enabled: productoActual.cantidades.some(c => c > 0) && !!productoActual.porKilo,
+  });
+
+  // ====================================
+  // CARGAR CATÁLOGOS AL MONTAR
   // ====================================
   useEffect(() => {
-    cargarCatalogosYTarifas();
+    cargarCatalogos();
   }, []);
 
-  const cargarCatalogosYTarifas = async () => {
+  const cargarCatalogos = async () => {
     try {
-      setLoadingCatalogos(true);
-      const [catalogosData, tarifasData] = await Promise.all([
-        getCatalogosProduccion(),
-        getTarifasProduccion(),
-      ]);
+      const catalogosData = await getCatalogosProduccion();
       setCaras(catalogosData.caras);
       setTintas(catalogosData.tintas);
-      setTarifas(tarifasData);
-      console.log("✅ Catálogos y tarifas cargados:", {
+      console.log("✅ Catálogos cargados:", {
         caras: catalogosData.caras.length,
         tintas: catalogosData.tintas.length,
-        tarifas: tarifasData.length,
       });
     } catch (error) {
-      console.error("❌ Error al cargar catálogos y tarifas:", error);
-    } finally {
-      setLoadingCatalogos(false);
+      console.error("❌ Error al cargar catálogos:", error);
     }
   };
+
+  // ====================================
+  // 🔥 ACTUALIZAR PRECIOS CUANDO LLEGAN DEL BACKEND
+  // ====================================
+  useEffect(() => {
+    if (resultados.length > 0) {
+      const nuevosPrecios = resultados.map((r, i) => {
+        return r?.precio_unitario ?? productoActual.precios[i];
+      });
+      
+      setProductoActual(prev => ({
+        ...prev,
+        precios: nuevosPrecios as [number, number, number],
+      }));
+    }
+  }, [resultados]);
 
   // ====================================
   // EFECTOS PARA BÚSQUEDA DE CLIENTES
@@ -352,65 +371,17 @@ export default function FormularioCotizacion({
   };
 
   // ====================================
-  // ✅ CÁLCULO DE PRECIO CON TARIFAS
+  // 🔥 MANEJAR CAMBIO DE CANTIDAD (SIN CÁLCULO LOCAL)
   // ====================================
   const handleCantidadChange = (index: number, value: string) => {
     const nuevasCantidades = [...productoActual.cantidades];
-    const nuevosPrecios = [...productoActual.precios];
     const cantidad = value === "" ? 0 : Number(value);
-    
     nuevasCantidades[index] = cantidad;
-
-    // ✅ USAR NUEVA FUNCIÓN DE CÁLCULO
-    if (cantidad > 0 && productoActual.porKilo && tarifas.length > 0) {
-      const resultado = calcularPrecioUnitario(
-        cantidad,
-        Number(productoActual.porKilo),
-        productoActual.tintasId,
-        productoActual.carasId,
-        tarifas
-      );
-      
-      if (resultado) {
-        nuevosPrecios[index] = resultado.precio_unitario;
-      } else {
-        console.warn("⚠️ No se encontró tarifa aplicable");
-        nuevosPrecios[index] = 0;
-      }
-    } else {
-      nuevosPrecios[index] = 0;
-    }
-
+    
     setProductoActual({
       ...productoActual,
       cantidades: nuevasCantidades as [number, number, number],
-      precios: nuevosPrecios as [number, number, number],
     });
-  };
-
-  // ====================================
-  // ✅ RECALCULAR PRECIOS CUANDO CAMBIEN TINTAS O CARAS
-  // ====================================
-  const recalcularPreciosConNuevosTintasOCaras = (nuevoTintasId: number, nuevoCarasId: number) => {
-    const nuevosPrecios = [...productoActual.precios];
-    
-    productoActual.cantidades.forEach((cantidad, index) => {
-      if (cantidad > 0 && productoActual.porKilo && tarifas.length > 0) {
-        const resultado = calcularPrecioUnitario(
-          cantidad,
-          Number(productoActual.porKilo),
-          nuevoTintasId,
-          nuevoCarasId,
-          tarifas
-        );
-        
-        if (resultado) {
-          nuevosPrecios[index] = resultado.precio_unitario;
-        }
-      }
-    });
-
-    return nuevosPrecios;
   };
 
   const handlePrecioChange = (index: number, value: string) => {
@@ -419,6 +390,14 @@ export default function FormularioCotizacion({
     setProductoActual({
       ...productoActual,
       precios: nuevosPrecios as [number, number, number],
+    });
+  };
+
+  // 🔥 NUEVO: Manejar cambio de observación
+  const handleObservacionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setProductoActual({
+      ...productoActual,
+      observacion: e.target.value,
     });
   };
 
@@ -455,6 +434,7 @@ export default function FormularioCotizacion({
         refuerzo: "", solapa: "",
       },
       medidasFormateadas: "",
+      observacion: "",  // 🔥 NUEVO
     });
     setDatosProductoNuevo({
       tipoProducto: "", tipoProductoId: 0,
@@ -691,16 +671,7 @@ export default function FormularioCotizacion({
             (modoProducto === "nuevo" && datosProductoNuevo.nombreCompleto)) && (
             <div className="mt-6 space-y-4 border-t pt-4">
 
-              {/* ✅ ADVERTENCIA SI NO HAY TARIFAS */}
-              {tarifas.length === 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-yellow-800 text-sm">
-                    ⚠️ No se han cargado las tarifas de producción. Los precios no se calcularán automáticamente.
-                  </p>
-                </div>
-              )}
-
-              {/* ✅ TINTAS Y CARAS DESDE BD */}
+              {/* TINTAS Y CARAS */}
               <div className="grid grid-cols-2 gap-4">
 
                 {/* Tintas */}
@@ -709,16 +680,15 @@ export default function FormularioCotizacion({
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={loadingCatalogos ? "Cargando..." : `${productoActual.tintas} tinta${productoActual.tintas > 1 ? "s" : ""}`}
+                      value={`${productoActual.tintas} tinta${productoActual.tintas > 1 ? "s" : ""}`}
                       readOnly
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer disabled:bg-gray-100"
-                      onClick={() => !loadingCatalogos && setMostrarDropdownTintas(!mostrarDropdownTintas)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
+                      onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)}
                     />
                     <button
                       type="button"
-                      onClick={() => !loadingCatalogos && setMostrarDropdownTintas(!mostrarDropdownTintas)}
-                      disabled={loadingCatalogos}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      onClick={() => setMostrarDropdownTintas(!mostrarDropdownTintas)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                       <svg className={`w-5 h-5 transition-transform ${mostrarDropdownTintas ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -731,16 +701,10 @@ export default function FormularioCotizacion({
                         <li
                           key={tinta.id}
                           onClick={() => {
-                            // ✅ RECALCULAR PRECIOS AL CAMBIAR TINTAS
-                            const nuevosPrecios = recalcularPreciosConNuevosTintasOCaras(
-                              tinta.id,
-                              productoActual.carasId
-                            );
                             setProductoActual({
                               ...productoActual,
                               tintas: tinta.cantidad,
                               tintasId: tinta.id,
-                              precios: nuevosPrecios as [number, number, number],
                             });
                             setMostrarDropdownTintas(false);
                           }}
@@ -759,16 +723,15 @@ export default function FormularioCotizacion({
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={loadingCatalogos ? "Cargando..." : `${productoActual.caras} cara${productoActual.caras > 1 ? "s" : ""}`}
+                      value={`${productoActual.caras} cara${productoActual.caras > 1 ? "s" : ""}`}
                       readOnly
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer disabled:bg-gray-100"
-                      onClick={() => !loadingCatalogos && setMostrarDropdownCaras(!mostrarDropdownCaras)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer"
+                      onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
                     />
                     <button
                       type="button"
-                      onClick={() => !loadingCatalogos && setMostrarDropdownCaras(!mostrarDropdownCaras)}
-                      disabled={loadingCatalogos}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      onClick={() => setMostrarDropdownCaras(!mostrarDropdownCaras)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                       <svg className={`w-5 h-5 transition-transform ${mostrarDropdownCaras ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -781,16 +744,10 @@ export default function FormularioCotizacion({
                         <li
                           key={cara.id}
                           onClick={() => {
-                            // ✅ RECALCULAR PRECIOS AL CAMBIAR CARAS
-                            const nuevosPrecios = recalcularPreciosConNuevosTintasOCaras(
-                              productoActual.tintasId,
-                              cara.id
-                            );
                             setProductoActual({
                               ...productoActual,
                               caras: cara.cantidad,
                               carasId: cara.id,
-                              precios: nuevosPrecios as [number, number, number],
                             });
                             setMostrarDropdownCaras(false);
                           }}
@@ -809,24 +766,82 @@ export default function FormularioCotizacion({
                 <label className="block text-sm font-medium text-gray-700 mb-2">Cantidades</label>
                 <div className="grid grid-cols-3 gap-3">
                   {productoActual.cantidades.map((cantidad, index) => (
-                    <input key={index} type="number" min="0" value={cantidad === 0 ? "" : cantidad} onChange={(e) => handleCantidadChange(index, e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" placeholder={`Cantidad ${index + 1}`} />
+                    <input 
+                      key={index} 
+                      type="number" 
+                      min="0" 
+                      value={cantidad === 0 ? "" : cantidad} 
+                      onChange={(e) => handleCantidadChange(index, e.target.value)} 
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" 
+                      placeholder={`Cantidad ${index + 1}`} 
+                    />
                   ))}
                 </div>
               </div>
 
-              {/* Precios */}
+              {/* 🔥 PRECIOS CON DEBOUNCE */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Precios unitarios (calculados automáticamente)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Precios unitarios (calculados automáticamente)
+                </label>
+                
+                {/* Error si hay */}
+                {errorCalculo && (
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-700 text-sm">⚠️ {errorCalculo}</p>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-3 gap-3">
                   {productoActual.precios.map((precio, index) => (
                     <div key={index} className="relative">
-                      <input type="text" value={precio === 0 ? "" : `$${precio.toFixed(4)}`} onChange={(e) => handlePrecioChange(index, e.target.value.replace("$", ""))} className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" placeholder="Auto" />
+                      <input
+                        type="text"
+                        value={precio === 0 ? "" : `$${precio.toFixed(4)}`}
+                        onChange={(e) => handlePrecioChange(index, e.target.value.replace("$", ""))}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white pr-10"
+                        placeholder="Auto"
+                        disabled={calculandoPrecios}
+                      />
+                      
+                      {/* Loading spinner */}
+                      {calculandoPrecios && productoActual.cantidades[index] > 0 && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+                        </div>
+                      )}
+                      
+                      {/* Kilogramos */}
                       {productoActual.cantidades[index] > 0 && productoActual.porKilo && (
-                        <div className="text-xs text-gray-500 mt-1">{(productoActual.cantidades[index] / Number(productoActual.porKilo)).toFixed(2)} kg</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {(productoActual.cantidades[index] / Number(productoActual.porKilo)).toFixed(2)} kg
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
+                
+                {/* Indicador de cálculo */}
+                {calculandoPrecios && (
+                  <div className="text-sm text-blue-600 mt-2 flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
+                    Calculando precios...
+                  </div>
+                )}
+              </div>
+
+              {/* 🔥 CAMPO DE OBSERVACIONES */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observaciones del producto (Opcional)
+                </label>
+                <textarea
+                  value={productoActual.observacion || ""}
+                  onChange={handleObservacionChange}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400"
+                  placeholder="Ej: Impresión a 2 colores, acabado mate, entrega urgente, etc."
+                />
               </div>
 
               <button type="button" onClick={handleAgregarProducto} disabled={guardandoProducto} className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2">
@@ -857,6 +872,14 @@ export default function FormularioCotizacion({
                         <p key={i} className="text-sm text-gray-700">{cant.toLocaleString()} unidades × ${prod.precios[i].toFixed(2)} = ${(cant * prod.precios[i]).toFixed(2)}</p>
                       ) : null)}
                     </div>
+                    
+                    {/* 🔥 MOSTRAR OBSERVACIÓN */}
+                    {prod.observacion && (
+                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                        <span className="font-semibold text-blue-900">Observaciones:</span>
+                        <span className="text-blue-800 ml-1">{prod.observacion}</span>
+                      </div>
+                    )}
                   </div>
                   <button type="button" onClick={() => handleEliminarProducto(index)} className="ml-4 text-red-600 hover:text-red-800 font-bold text-xl">✕</button>
                 </div>
@@ -868,11 +891,6 @@ export default function FormularioCotizacion({
           </div>
         )}
 
-        {/* Observaciones */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Observaciones (Opcional)</label>
-          <textarea name="observaciones" value={datos.observaciones} onChange={handleInputChange} rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400" placeholder="Notas adicionales sobre la cotización..." />
-        </div>
 
         <div className="flex justify-end gap-3">
           <button type="button" onClick={handleAtras} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>

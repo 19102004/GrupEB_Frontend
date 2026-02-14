@@ -10,11 +10,6 @@ export const getCotizaciones = async () => {
 
 // ============================================================
 // CREAR COTIZACIÓN
-//
-// Recibe exactamente el objeto `datos` que entrega
-// FormularioCotizacion en su onSubmit, más las tarifas
-// no son necesarias aquí — el precio_total ya viene
-// calculado en cada producto (cantidad * precio_unitario).
 // ============================================================
 export const crearCotizacion = async (datos: {
   clienteId?: number;
@@ -24,6 +19,7 @@ export const crearCotizacion = async (datos: {
     precios: [number, number, number];
     tintasId: number;
     carasId: number;
+    observacion?: string;
     [key: string]: any;
   }[];
   [key: string]: any;
@@ -37,7 +33,6 @@ export const crearCotizacion = async (datos: {
       throw new Error(`El producto "${prod.nombre}" no tiene ID asignado`);
     }
 
-    // Una fila de detalle por cada cantidad > 0 con precio > 0
     const detalles = prod.cantidades
       .map((cantidad, i) => {
         if (cantidad <= 0 || prod.precios[i] <= 0) return null;
@@ -55,9 +50,10 @@ export const crearCotizacion = async (datos: {
     }
 
     return {
-      productoId: prod.productoId,
-      tintasId:   prod.tintasId,
-      carasId:    prod.carasId,
+      productoId:  prod.productoId,
+      tintasId:    prod.tintasId,
+      carasId:     prod.carasId,
+      observacion: prod.observacion || null,
       detalles,
     };
   });
@@ -67,19 +63,50 @@ export const crearCotizacion = async (datos: {
     productos,
   });
 
-  return response.data; // { message, no_cotizacion, cotizacion_ids }
+  return response.data;
 };
 
 // ============================================================
-// ACTUALIZAR ESTADO
+// APROBAR O RECHAZAR UN DETALLE INDIVIDUAL
+// aprobado: true = aprobar | false = rechazar
+// ============================================================
+export const aprobarDetalle = async (
+  detalleId: number,
+  aprobado: boolean
+) => {
+  const response = await api.patch(
+    `/cotizaciones/detalle/${detalleId}/aprobar`,
+    { aprobado }
+  );
+  return response.data;
+};
+
+// ============================================================
+// ACTUALIZAR OBSERVACIÓN DE UN PRODUCTO
+// ============================================================
+export const actualizarObservacion = async (
+  productoId: number,
+  observacion: string
+) => {
+  const response = await api.patch(
+    `/cotizaciones/producto/${productoId}/observacion`,
+    { observacion }
+  );
+  return response.data;
+};
+
+// ============================================================
+// ACTUALIZAR ESTADO DE LA COTIZACIÓN
+// estadoId: 1=Pendiente | 2=Aprobada | 3=Rechazada
 // ============================================================
 export const actualizarEstado = async (
   noCotizacion: number,
   estadoId: number
 ) => {
-  const response = await api.patch(`/cotizaciones/${noCotizacion}/estado`, {
-    estadoId,
-  });
+  const response = await api.patch(
+    `/cotizaciones/${noCotizacion}/estado`,
+    { estadoId }
+  );
   return response.data;
 };
 
