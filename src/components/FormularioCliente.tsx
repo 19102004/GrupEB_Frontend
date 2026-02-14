@@ -4,6 +4,7 @@ import type { RegimenFiscal, MetodoPago, FormaPago } from "../types/clientes.typ
 import type { CreateClienteRequest, UpdateClienteRequest, Cliente } from "../types/clientes.types";
 
 // ✅ 10 Monedas más utilizadas en el mundo
+
 const MONEDAS = [
   { codigo: "MXN", nombre: "Peso mexicano (MXN)" },
   { codigo: "USD", nombre: "Dólar estadounidense (USD)" },
@@ -51,7 +52,7 @@ export default function FormularioCliente({
     rfc: clienteEditar?.rfc || "",
     correo_facturacion: clienteEditar?.correo_facturacion || "",
     uso_cfdi: clienteEditar?.uso_cfdi || "",
-    moneda: clienteEditar?.moneda || "",
+    moneda: clienteEditar?.moneda || "MXN",
     domicilio: clienteEditar?.domicilio || "",
     numero: clienteEditar?.numero || "",
     colonia: clienteEditar?.colonia || "",

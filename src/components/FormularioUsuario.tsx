@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getRoles } from "../services/rolesService";
+import { getRoles, getPrivilegiosByRol } from "../services/rolesService";
 import { getPrivilegios } from "../services/privilegiosService";
 import type { Rol } from "../types/rol.types";
 import type { Privilegio } from "../types/privilegio.types";
@@ -49,6 +49,31 @@ export default function FormularioUsuario({
     } catch (error) {
       console.error("Error al cargar datos:", error);
       alert("Error al cargar roles y privilegios");
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: Cargar privilegios del rol seleccionado
+  const cargarPrivilegiosDelRol = async (rolId: number) => {
+    try {
+      console.log(`🔄 Cargando privilegios para rol ${rolId}`);
+      
+      const privilegiosRol = await getPrivilegiosByRol(rolId);
+      
+      if (privilegiosRol.acceso_total) {
+        console.log("👑 Rol con acceso total");
+        setDatos({ ...datos, roles_idroles: rolId, privilegios: [] });
+      } else {
+        console.log(`✅ Privilegios cargados: ${privilegiosRol.privilegios.length}`);
+        setDatos({ 
+          ...datos, 
+          roles_idroles: rolId, 
+          privilegios: privilegiosRol.privilegios 
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error al cargar privilegios del rol:", error);
+      // En caso de error, solo actualizar el rol sin cambiar privilegios
+      setDatos({ ...datos, roles_idroles: rolId });
     }
   };
 
@@ -121,6 +146,27 @@ export default function FormularioUsuario({
     if (errores[name]) {
       setErrores({ ...errores, [name]: "" });
     }
+  };
+
+  // ✅ MODIFICADO: Manejo de cambio de rol con carga automática de privilegios
+  const handleRolChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const rolId = parseInt(e.target.value);
+    
+    if (rolId === 0) {
+      setDatos({ ...datos, roles_idroles: 0, privilegios: [] });
+      if (errores.roles_idroles) {
+        setErrores({ ...errores, roles_idroles: "" });
+      }
+      return;
+    }
+
+    // Limpiar error
+    if (errores.roles_idroles) {
+      setErrores({ ...errores, roles_idroles: "" });
+    }
+
+    // Cargar privilegios del rol automáticamente
+    await cargarPrivilegiosDelRol(rolId);
   };
 
   const handlePrivilegioChange = (idPrivilegio: number) => {
@@ -365,7 +411,7 @@ export default function FormularioUsuario({
             <select
               name="roles_idroles"
               value={datos.roles_idroles}
-              onChange={handleInputChange}
+              onChange={handleRolChange}
               className={`w-full px-4 py-2 border rounded-lg
                          focus:ring-2 focus:ring-blue-500 focus:border-transparent
                          text-gray-900 bg-white
@@ -424,9 +470,19 @@ export default function FormularioUsuario({
             </p>
           </div>
         ) : (
-          <p className="text-gray-600 mb-6 text-sm">
-            Selecciona los privilegios que tendrá este usuario
-          </p>
+          <>
+            <p className="text-gray-600 mb-4 text-sm">
+              Selecciona los privilegios que tendrá este usuario
+            </p>
+            {/* ✅ INDICADOR: Muestra si los privilegios fueron cargados del rol */}
+            {datos.privilegios && datos.privilegios.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-blue-800 text-sm">
+                  Los privilegios fueron seleccionados basados en el rol elegido. Puedes modificarlos según sea necesario.
+                </p>
+              </div>
+            )}
+          </>
         )}
 
         <div className="space-y-3 max-h-96 overflow-y-auto">

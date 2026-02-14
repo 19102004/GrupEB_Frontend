@@ -1,7 +1,7 @@
 import api from "./api";
 
-export const loginService = async (codigo: string) => {
-  const response = await api.post("/auth/login", { codigo });
+export const loginService = async (correo: string, codigo: string) => {
+  const response = await api.post("/auth/login", { correo, codigo });
   return response.data;
 };
 

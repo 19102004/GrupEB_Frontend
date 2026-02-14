@@ -1,397 +1,256 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
 import FormularioCotizacion from "../components/FormularioCotizacion";
-import EditarCotizacion from "../components/EditarCotizacion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getCatalogosPlastico } from "../services/productosPlasticoService";
+import {
+  getCotizaciones,
+  crearCotizacion,
+  eliminarCotizacion,
+  actualizarEstado,
+} from "../services/cotizacionesService";
+import type { CatalogosPlastico } from "../types/productos-plastico.types";
+import type { Cotizacion } from "../types/cotizaciones.types";
 
-interface Producto {
-  nombre: string;
-  cantidades: [number, number, number];
-  precios: [number, number, number];
-  calibre: string;
-  tintas: number;
-  caras: number;
-  disenoAprobado: boolean;
-  cantidadesSeleccionadas?: boolean[]; // Array de 3 booleanos
-}
-
-interface Cotizacion {
-  id: number;
-  cliente: string;
-  telefono: string;
-  correo: string;
-  empresa: string;
-  productos: Producto[];
-  observaciones: string;
-  total: number;
-  fecha: string;
-  estado: "Pendiente" | "Aprobada" | "Rechazada";
-  anticipoAprobado: boolean;
-}
-
-interface DatosCotizacion {
-  cliente: string;
-  telefono: string;
-  correo: string;
-  empresa: string;
-  productos: {
-    nombre: string;
-    cantidades: [number, number, number];
-    precios: [number, number, number];
-    calibre: string;
-    tintas: number;
-    caras: number;
-  }[];
-  observaciones: string;
-}
-
+// ============================================================
+// COMPONENTE
+// ============================================================
 export default function Cotizaciones() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalEditarOpen, setModalEditarOpen] = useState(false);
-  const [cotizacionEditando, setCotizacionEditando] = useState<Cotizacion | null>(null);
   const [busqueda, setBusqueda] = useState("");
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([
-    {
-      id: 1,
-      cliente: "María González García",
-      telefono: "33-1234-5678",
-      correo: "maria.gonzalez@empresa.com",
-      empresa: "Distribuidora González",
-      productos: [
-        { 
-          nombre: "Bolsa plana 30x40 baja densidad", 
-          cantidades: [1000, 2000, 3000],
-          precios: [1.5, 1.4, 1.3],
-          calibre: "200", 
-          tintas: 2, 
-          caras: 1, 
-          disenoAprobado: false,
-          cantidadesSeleccionadas: [false, true, false]
-        },
-        { 
-          nombre: "Bolsa troquelada 40x50 alta densidad", 
-          cantidades: [500, 1000, 1500],
-          precios: [2.0, 1.9, 1.8],
-          calibre: "250", 
-          tintas: 3, 
-          caras: 2, 
-          disenoAprobado: true,
-          cantidadesSeleccionadas: [true, false, false]
-        }
-      ],
-      observaciones: "Entrega urgente",
-      total: 3800,
-      fecha: "2025-01-15",
-      estado: "Pendiente",
-      anticipoAprobado: false
-    },
-    {
-      id: 2,
-      cliente: "Carlos Hernández López",
-      telefono: "33-8765-4321",
-      correo: "carlos.hdez@comercial.mx",
-      empresa: "Comercial Hernández",
-      productos: [
-        { 
-          nombre: "Bolsa celofán 30x40 BOPP", 
-          cantidades: [2000, 3000, 5000],
-          precios: [1.8, 1.7, 1.6],
-          calibre: "175", 
-          tintas: 1, 
-          caras: 1, 
-          disenoAprobado: true,
-          cantidadesSeleccionadas: [false, false, true]
-        }
-      ],
-      observaciones: "",
-      total: 8000,
-      fecha: "2025-01-14",
-      estado: "Aprobada",
-      anticipoAprobado: true
-    }
-  ]);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [loadingCots, setLoadingCots] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
-  const normalizarTexto = (texto: string) => {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[.,\-]/g, "")
-      .trim();
+  const [catalogos, setCatalogos] = useState<CatalogosPlastico>({ 
+    tiposProducto: [], 
+    materiales: [], 
+    calibres: [] 
+  });
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
+  const [errorCatalogos, setErrorCatalogos] = useState("");
+
+  
+  // Cargar al montar
+  useEffect(() => {
+    cargarCatalogos();
+    cargarCotizaciones();
+  }, []);
+
+  const cargarCatalogos = async () => {
+    try {
+      setCargandoCatalogos(true);
+      setErrorCatalogos("");
+      const data = await getCatalogosPlastico();
+      setCatalogos(data);
+    } catch (error: any) {
+      setErrorCatalogos(error.response?.data?.error || "Error al cargar catálogos");
+    } finally {
+      setCargandoCatalogos(false);
+    }
   };
 
-  const cotizacionesFiltradas = cotizaciones.filter((cotizacion) => {
+  const cargarCotizaciones = async () => {
+    try {
+      setLoadingCots(true);
+      const data = await getCotizaciones();
+      setCotizaciones(data);
+    } catch (error: any) {
+      console.error("❌ Error al cargar cotizaciones:", error);
+    } finally {
+      setLoadingCots(false);
+    }
+  };
+
+  // Filtrado
+  const normalizar = (t: string) =>
+    t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+  const cotizacionesFiltradas = cotizaciones.filter((c) => {
     if (!busqueda) return true;
-
-    const terminoBusqueda = normalizarTexto(busqueda);
-
+    const t = normalizar(busqueda);
     return (
-      normalizarTexto(cotizacion.cliente).includes(terminoBusqueda) ||
-      normalizarTexto(cotizacion.empresa).includes(terminoBusqueda) ||
-      normalizarTexto(cotizacion.correo).includes(terminoBusqueda) ||
-      normalizarTexto(cotizacion.telefono).includes(terminoBusqueda) ||
-      normalizarTexto(cotizacion.estado).includes(terminoBusqueda) ||
-      cotizacion.id.toString().includes(terminoBusqueda)
+      normalizar(c.cliente  ?? "").includes(t) ||
+      normalizar(c.empresa  ?? "").includes(t) ||
+      normalizar(c.correo   ?? "").includes(t) ||
+      normalizar(c.telefono ?? "").includes(t) ||
+      normalizar(c.estado).includes(t)         ||
+      c.no_cotizacion.toString().includes(t)
     );
   });
 
-  const handleEditar = (id: number) => {
-    const cotizacion = cotizaciones.find(c => c.id === id);
-    if (cotizacion) {
-      setCotizacionEditando(cotizacion);
-      setModalEditarOpen(true);
+  // Crear
+  const handleSubmit = async (datos: any) => {
+    setGuardando(true);
+    setErrorGuardar(null);
+    try {
+      await crearCotizacion(datos);
+      setModalOpen(false);
+      await cargarCotizaciones();
+    } catch (error: any) {
+      console.error("❌ Error al guardar cotización:", error);
+      setErrorGuardar(error.message || error.response?.data?.error || "Error al guardar");
+    } finally {
+      setGuardando(false);
     }
   };
 
-  const handleEliminar = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar esta cotización?")) {
-      setCotizaciones(cotizaciones.filter(cotizacion => cotizacion.id !== id));
+  // Eliminar
+  const handleEliminar = async (noCotizacion: number) => {
+    if (!confirm("¿Estás seguro de eliminar esta cotización?")) return;
+    try {
+      await eliminarCotizacion(noCotizacion);
+      setCotizaciones((prev) => prev.filter((c) => c.no_cotizacion !== noCotizacion));
+    } catch (error: any) {
+      alert(error.response?.data?.error || "Error al eliminar cotización");
     }
   };
 
-  const handleAgregarCotizacion = () => {
-    setModalOpen(true);
-  };
-
-  const calcularTotal = (productos: Producto[]) => {
-    return productos.reduce((total, prod) => {
-      const cantidadesSeleccionadas = prod.cantidadesSeleccionadas || [false, false, false];
-      const subtotal = cantidadesSeleccionadas.reduce((sum, seleccionada, idx) => {
-        if (seleccionada) {
-          const cantidad = Number(prod.cantidades[idx]) || 0;
-          const precio = Number(prod.precios[idx]) || 0;
-          return sum + (cantidad * precio);
-        }
-        return sum;
-      }, 0);
-      return total + subtotal;
-    }, 0);
-  };
-
-  const handleSubmit = (datos: DatosCotizacion) => {
-    const productosConDiseno = datos.productos.map(p => ({
-      nombre: p.nombre || "",
-      cantidades: p.cantidades.map(c => Number(c) || 0) as [number, number, number],
-      precios: p.precios.map(pr => Number(pr) || 0) as [number, number, number],
-      calibre: p.calibre || "",
-      tintas: Number(p.tintas) || 0,
-      caras: Number(p.caras) || 0,
-      disenoAprobado: false,
-      cantidadesSeleccionadas: [false, false, false]
-    }));
-
-    const nuevaCotizacion: Cotizacion = {
-      id: cotizaciones.length + 1,
-      cliente: datos.cliente,
-      telefono: datos.telefono,
-      correo: datos.correo,
-      empresa: datos.empresa,
-      productos: productosConDiseno,
-      observaciones: datos.observaciones,
-      total: calcularTotal(productosConDiseno),
-      fecha: new Date().toISOString().split('T')[0],
-      estado: "Pendiente",
-      anticipoAprobado: false
+  // Badge estado
+  const estadoBadge = (estado: string) => {
+    const mapa: Record<string, string> = {
+      Pendiente: "bg-yellow-100 text-yellow-800",
+      Aprobada:  "bg-green-100 text-green-800",
+      Rechazada: "bg-red-100 text-red-800",
     };
-
-    setCotizaciones([...cotizaciones, nuevaCotizacion]);
-    setModalOpen(false);
-  };
-
-  const handleEditarSubmit = (cotizacionActualizada: Cotizacion) => {
-    // Recalcular el total basado en las cantidades seleccionadas
-    const nuevoTotal = calcularTotal(cotizacionActualizada.productos);
-
-    setCotizaciones(cotizaciones.map(cot => 
-      cot.id === cotizacionActualizada.id 
-        ? { ...cotizacionActualizada, total: nuevoTotal } 
-        : cot
-    ));
-    setModalEditarOpen(false);
-    setCotizacionEditando(null);
-  };
-
-  const handleCancelar = () => {
-    setModalOpen(false);
-  };
-
-  const handleCancelarEditar = () => {
-    setModalEditarOpen(false);
-    setCotizacionEditando(null);
-  };
-
-  const getEstadoBadge = (cotizacion: Cotizacion) => {
-    const { estado, anticipoAprobado, productos } = cotizacion;
-    let color = "bg-yellow-100 text-yellow-800";
-    let icono = "⏱️";
-    
-    if (estado === "Aprobada") {
-      color = "bg-green-100 text-green-800";
-      icono = "✓";
-    } else if (estado === "Rechazada") {
-      color = "bg-red-100 text-red-800";
-      icono = "✕";
-    }
-
-    const productosAprobados = productos.filter(p => p.disenoAprobado).length;
-    const todosDisenos = productos.every(p => p.disenoAprobado);
-    
-    const productosConSeleccion = productos.filter(p => {
-      const cantidadesSeleccionadas = p.cantidadesSeleccionadas || [false, false, false];
-      return cantidadesSeleccionadas.some(sel => sel);
-    }).length;
-
+    const color = mapa[estado] ?? "bg-gray-100 text-gray-700";
     return (
-      <div className="flex flex-col gap-1">
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
-          {icono} {estado}
-        </span>
-        {productosAprobados > 0 && (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            todosDisenos ? 'bg-blue-100 text-blue-800' : 'bg-blue-50 text-blue-700'
-          }`}>
-            🎨 {productosAprobados}/{productos.length} diseños
-          </span>
-        )}
-        {productosConSeleccion > 0 && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            ✓ {productosConSeleccion}/{productos.length} cantidades
-          </span>
-        )}
-        {anticipoAprobado && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-            💰 Anticipo OK
-          </span>
-        )}
-      </div>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
+        {estado}
+      </span>
     );
   };
 
+  const formatFecha = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString("es-MX", {
+        day: "2-digit", month: "short", year: "numeric",
+      });
+    } catch { return iso; }
+  };
+
+  // ============================================================
   return (
     <Dashboard userName="Administrador">
-      <h1 className="text-2xl font-bold mb-4">Cotizaciones</h1>
-
-      <p className="text-slate-400 mb-6">
-        Gestión de cotizaciones y seguimiento de aprobaciones.
-      </p>
+      <h1 className="text-2xl font-bold mb-2">Cotizaciones</h1>
+      <p className="text-slate-400 mb-6">Gestión de cotizaciones y seguimiento de aprobaciones.</p>
 
       {/* BUSCADOR */}
-      <div className="mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por cliente, empresa, correo, teléfono, estado o ID..."
-            className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <svg
-            className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-        </div>
+      <div className="mb-6 relative">
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar por cliente, empresa, correo, teléfono, estado o folio..."
+          className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
         {busqueda && (
-          <p className="mt-2 text-sm text-gray-600">
-            Se encontraron {cotizacionesFiltradas.length} resultado(s)
-          </p>
+          <p className="mt-2 text-sm text-gray-500">{cotizacionesFiltradas.length} resultado(s)</p>
         )}
       </div>
 
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
+      {/* TABLA */}
+      <div className="overflow-x-auto bg-white rounded-lg shadow mb-6">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Fecha
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Cliente
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Empresa
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Productos
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Total
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Acciones
-              </th>
+              {["Folio", "Fecha", "Cliente", "Empresa", "Productos", "Total", "Estado", "Acciones"].map((h) => (
+                <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}
             </tr>
           </thead>
-
           <tbody className="bg-white divide-y divide-gray-200">
-            {cotizacionesFiltradas.length > 0 ? (
-              cotizacionesFiltradas.map((cotizacion) => (
-                <tr key={cotizacion.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{cotizacion.id}
+            {loadingCots ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-12 text-center">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+                  <p className="mt-3 text-gray-500">Cargando cotizaciones...</p>
+                </td>
+              </tr>
+            ) : cotizacionesFiltradas.length > 0 ? (
+              cotizacionesFiltradas.map((cot) => (
+                <tr key={cot.no_cotizacion} className="hover:bg-gray-50">
+
+                  {/* Folio */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    #{cot.no_cotizacion}
                   </td>
+
+                  {/* Fecha */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cotizacion.fecha}
+                    {formatFecha(cot.fecha)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {cotizacion.cliente}
+
+                  {/* Cliente */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <p className="text-sm font-medium text-gray-900">{cot.cliente || "—"}</p>
+                    {cot.telefono && <p className="text-xs text-gray-400">{cot.telefono}</p>}
                   </td>
+
+                  {/* Empresa */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cotizacion.empresa || "N/A"}
+                    {cot.empresa || "—"}
                   </td>
+
+                  {/* Productos */}
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    <div className="max-w-xs">
-                      {cotizacion.productos.length} producto(s)
-                      <div className="text-xs text-gray-400 mt-1">
-                        {cotizacion.productos.slice(0, 2).map((p, i) => (
-                          <div key={i}>• {p.nombre.substring(0, 30)}...</div>
+                    <span className="font-medium text-gray-700">
+                      {cot.productos.length} producto(s)
+                    </span>
+                    <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                      {cot.productos.slice(0, 2).map((p, i) => (
+                        <div key={i}>• {p.nombre.length > 35 ? p.nombre.slice(0, 35) + "…" : p.nombre}</div>
+                      ))}
+                      {cot.productos.length > 2 && (
+                        <div className="text-blue-400">+ {cot.productos.length - 2} más</div>
+                      )}
+                    </div>
+                    {/* Cantidades como pills */}
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {cot.productos
+                        .flatMap((p) => p.detalles.map((d) => d.cantidad))
+                        .slice(0, 6)
+                        .map((cant, i) => (
+                          <span key={i} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                            {cant.toLocaleString()}
+                          </span>
                         ))}
-                        {cotizacion.productos.length > 2 && (
-                          <div>+ {cotizacion.productos.length - 2} más</div>
-                        )}
-                      </div>
                     </div>
                   </td>
+
+                  {/* Total */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                    ${cotizacion.total.toFixed(2)}
+                    ${cot.total.toFixed(2)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {getEstadoBadge(cotizacion)}
+
+                  {/* Estado */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {estadoBadge(cot.estado)}
                   </td>
+
+                  {/* Acciones */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleEditar(cotizacion.id)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      Ver/Editar
-                    </button>
-                    <button
-                      onClick={() => handleEliminar(cotizacion.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Eliminar
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleEliminar(cot.no_cotizacion)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                  No se encontraron cotizaciones que coincidan con "{busqueda}"
+                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  {busqueda
+                    ? `No se encontraron cotizaciones para "${busqueda}"`
+                    : "No hay cotizaciones registradas"}
                 </td>
               </tr>
             )}
@@ -399,26 +258,48 @@ export default function Cotizaciones() {
         </table>
       </div>
 
-      <div className="mt-6">
-        <button
-          onClick={handleAgregarCotizacion}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200"
-        >
-          + Nueva Cotización
-        </button>
-      </div>
+      {/* BOTÓN NUEVA COTIZACIÓN */}
+      <button
+        onClick={() => { setErrorGuardar(null); setModalOpen(true); }}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition"
+      >
+        + Nueva Cotización
+      </button>
 
-      <Modal isOpen={modalOpen} onClose={handleCancelar} title="Nueva Cotización">
-        <FormularioCotizacion onSubmit={handleSubmit} onCancel={handleCancelar} />
-      </Modal>
-
-      <Modal isOpen={modalEditarOpen} onClose={handleCancelarEditar} title="Editar Cotización">
-        {cotizacionEditando && (
-          <EditarCotizacion 
-            cotizacion={cotizacionEditando} 
-            onSave={handleEditarSubmit} 
-            onCancel={handleCancelarEditar} 
-          />
+      {/* MODAL */}
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nueva Cotización">
+        {cargandoCatalogos ? (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-600">Cargando catálogos...</span>
+          </div>
+        ) : errorCatalogos ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h3 className="text-red-800 font-semibold mb-2">Error al cargar catálogos</h3>
+            <p className="text-red-600 mb-4">{errorCatalogos}</p>
+            <button onClick={cargarCatalogos} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+              Reintentar
+            </button>
+          </div>
+        ) : (
+          <div>
+            {errorGuardar && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 text-sm">❌ {errorGuardar}</p>
+              </div>
+            )}
+            {guardando && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                <p className="text-blue-700 text-sm">Guardando cotización...</p>
+              </div>
+            )}
+            <FormularioCotizacion
+              onSubmit={handleSubmit}
+              onCancel={() => setModalOpen(false)}
+              catalogos={catalogos}
+            />
+          </div>
         )}
       </Modal>
     </Dashboard>

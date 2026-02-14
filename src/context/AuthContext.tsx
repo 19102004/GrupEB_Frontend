@@ -12,7 +12,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (codigo: string) => Promise<void>;
+  login: (correo: string, codigo: string) => Promise<void>; // ← Actualizado
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -75,10 +75,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = async (codigo: string) => {
+  const login = async (correo: string, codigo: string) => { // ← Actualizado
     try {
-      console.log("🔑 Intentando login...");
-      const data = await loginService(codigo);
+      console.log("🔑 Intentando login con correo y código...");
+      const data = await loginService(correo, codigo); // ← Actualizado
       console.log("✅ Login exitoso");
       
       setUser(data.usuario);

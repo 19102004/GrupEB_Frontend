@@ -33,6 +33,47 @@ export interface Cliente {
   estado?: string;
 }
 
+// ====================================
+// NUEVAS INTERFACES PARA BÚSQUEDA
+// ====================================
+
+// Cliente simplificado para búsqueda (solo campos que devuelve /search)
+export interface ClienteBusqueda {
+  idclientes: number;
+  empresa: string | null;
+  correo: string | null;
+  telefono: string | null;
+  atencion: string | null;
+  celular: string | null;
+  razon_social: string | null;
+}
+
+// ====================================
+// NUEVAS INTERFACES PARA CLIENTE LIGERO
+// ====================================
+
+export interface CreateClienteLigeroRequest {
+  nombre?: string;      // Va al campo "atencion"
+  telefono?: string;
+  correo?: string;
+  empresa?: string;
+}
+
+export interface CreateClienteLigeroResponse {
+  message: string;
+  cliente: {
+    id: number;
+    nombre: string | null;
+    empresa: string | null;
+    correo: string | null;
+    telefono: string | null;
+  };
+}
+
+// ====================================
+// INTERFACES EXISTENTES
+// ====================================
+
 export interface CreateClienteRequest {
   empresa: string;
   correo: string;
