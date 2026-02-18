@@ -17,6 +17,7 @@ export interface CatalogoMaterial {
 export interface CatalogoCalibre {
   id: number;
   valor: number;
+  gramos?: number; // ✅ Solo viene cuando es calibre BOPP
 }
 
 export interface CatalogosPlastico {
@@ -77,7 +78,6 @@ export interface ProductoPlasticoResponse {
 // NUEVAS INTERFACES PARA BÚSQUEDA
 // ====================================
 
-// Producto simplificado para búsqueda (lo que devuelve /search)
 export interface ProductoBusqueda {
   id: number;
   altura: number;
@@ -96,7 +96,6 @@ export interface ProductoBusqueda {
   calibre_id: number;
 }
 
-// Respuesta de verificación de producto
 export interface VerificarProductoResponse {
   existe: boolean;
   producto: {
@@ -126,6 +125,7 @@ export interface DatosProducto {
   materialId: number;
   calibre: string;
   calibreId: number;
+  gramos?: number; // ✅ NUEVO: gramos del calibre BOPP, undefined para otros materiales
   medidas: Record<MedidaKey, string>;
   medidasFormateadas: string;
   nombreCompleto: string;

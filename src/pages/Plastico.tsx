@@ -5,23 +5,16 @@ import {
   getCatalogosPlastico,
   createProductoPlastico,
 } from "../services/productosPlasticoService";
+import { getTarifas } from "../services/tarifas.service";
 import type {
   CatalogosPlastico,
   DatosProducto,
 } from "../types/productos-plastico.types";
+import type { Tarifa } from "../types/tarifas.types";
+import { calcularPorKiloStr, calcularCelofanBopp } from "../utils/calcularPorKilo";
 
-const MERMA_PRODUCCION: Record<number, number> = {
-  30: 20,
-  50: 10,
-  75: 8,
-  100: 7,
-  200: 5,
-  300: 4,
-  500: 3,
-  1000: 1,
-};
-
-const COSTOS_PRODUCCION: Record<number, number> = {
+// ✅ Hardcodeado temporal para celofán hasta que se construya su tabla en BD
+const COSTOS_CELOFAN: Record<number, number> = {
   30: 250,
   50: 200,
   75: 180,
@@ -32,8 +25,20 @@ const COSTOS_PRODUCCION: Record<number, number> = {
   1000: 90,
 };
 
+const MERMA_CELOFAN: Record<number, number> = {
+  30: 20,
+  50: 10,
+  75: 8,
+  100: 7,
+  200: 5,
+  300: 4,
+  500: 3,
+  1000: 1,
+};
+
+const kilosReferencia = [30, 50, 75, 100, 200, 300, 500, 1000];
+
 export default function Plastico() {
-  // Estados para datos del producto
   const [datosProducto, setDatosProducto] = useState<DatosProducto>({
     tipoProducto: "",
     tipoProductoId: 0,
@@ -41,6 +46,7 @@ export default function Plastico() {
     materialId: 0,
     calibre: "",
     calibreId: 0,
+    gramos: undefined,
     medidas: {
       altura: "",
       ancho: "",
@@ -54,38 +60,64 @@ export default function Plastico() {
     nombreCompleto: "",
   });
 
-  const [bolsasPorKilo, setBolsasPorKilo] = useState("");
-
-  // Estados para catálogos
   const [catalogos, setCatalogos] = useState<CatalogosPlastico>({
     tiposProducto: [],
     materiales: [],
     calibres: [],
   });
 
+  const [tarifasPlastico, setTarifasPlastico] = useState<Record<number, { precio: number; merma: number }>>({});
+
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
-  const [errorCatalogos, setErrorCatalogos] = useState("");
+  const [errorCatalogos, setErrorCatalogos]       = useState("");
+  const [guardando, setGuardando]                 = useState(false);
 
-  // Estados para guardar
-  const [guardando, setGuardando] = useState(false);
+  const esCelofanBopp =
+    datosProducto.tipoProducto === "Bolsa celofán" &&
+    datosProducto.material.toUpperCase() === "BOPP";
 
-  // Cargar catálogos al montar el componente
+  const resultadoCelofan =
+    esCelofanBopp && datosProducto.gramos
+      ? calcularCelofanBopp(datosProducto, datosProducto.gramos)
+      : null;
+
+  const bolsasPorKilo = esCelofanBopp
+    ? resultadoCelofan?.bolsasPorKilo.toFixed(3) ?? ""
+    : calcularPorKiloStr(datosProducto, catalogos.materiales);
+
+  const pesoPorBolsa = resultadoCelofan?.pesoPorBolsa ?? null;
+
   useEffect(() => {
-    cargarCatalogos();
+    cargarDatos();
   }, []);
 
-  const cargarCatalogos = async () => {
+  const cargarDatos = async () => {
     try {
       setCargandoCatalogos(true);
       setErrorCatalogos("");
-      console.log("📋 Cargando catálogos...");
 
-      const data = await getCatalogosPlastico();
-      setCatalogos(data);
+      const [datosCatalogos, tarifas] = await Promise.all([
+        getCatalogosPlastico(),
+        getTarifas(),
+      ]);
 
-      console.log("✅ Catálogos cargados:", data);
+      setCatalogos(datosCatalogos);
+
+      // ✅ Filtrar tinta 1 y convertir precio/merma a número
+      const tarifasMap: Record<number, { precio: number; merma: number }> = {};
+      tarifas.forEach((tarifa: Tarifa) => {
+        if (Number(tarifa.cantidad_tintas) === 1) {
+          tarifasMap[Number(tarifa.kilogramos)] = {
+            precio: Number(tarifa.precio),
+            merma:  Number(tarifa.merma_porcentaje),
+          };
+        }
+      });
+
+      setTarifasPlastico(tarifasMap);
+
     } catch (error: any) {
-      console.error("❌ Error al cargar catálogos:", error);
+      console.error("❌ Error al cargar datos:", error);
       setErrorCatalogos(
         error.response?.data?.error || "Error al cargar los catálogos"
       );
@@ -94,68 +126,11 @@ export default function Plastico() {
     }
   };
 
-  // ✅ Calcular bolsas por kilo automáticamente (CON VALOR DE LA BD)
-  useEffect(() => {
-    if (
-      !datosProducto.tipoProducto ||
-      !datosProducto.calibre ||
-      !datosProducto.material ||
-      !datosProducto.materialId
-    ) {
-      setBolsasPorKilo("");
-      return;
-    }
-
-    const altura = parseFloat(datosProducto.medidas.altura) || 0;
-    const ancho = parseFloat(datosProducto.medidas.ancho) || 0;
-    const fuelleFondo = parseFloat(datosProducto.medidas.fuelleFondo) || 0;
-    const refuerzo = parseFloat(datosProducto.medidas.refuerzo) || 0;
-    const fuelleLateral1 = parseFloat(datosProducto.medidas.fuelleLateral1) || 0;
-    const fuelleLateral2 = parseFloat(datosProducto.medidas.fuelleLateral2) || 0;
-    const calibreNum = parseFloat(datosProducto.calibre) || 0;
-
-    // Verificar que tengamos al menos altura y ancho
-    if (altura === 0 || ancho === 0 || calibreNum === 0) {
-      setBolsasPorKilo("");
-      return;
-    }
-
-    // ✅ OBTENER FACTOR DESDE LA BD
-    const materialSeleccionado = catalogos.materiales.find(
-      (m) => m.id === datosProducto.materialId
-    );
-
-    if (!materialSeleccionado) {
-      setBolsasPorKilo("");
-      return;
-    }
-
-    const factor = parseFloat(materialSeleccionado.valor);
-
-    console.log("🧮 Calculando con factor:", factor, "del material:", materialSeleccionado.nombre);
-
-    // Suma vertical: Altura + Fuelle Fondo + Refuerzo
-    const sumaVertical = altura + fuelleFondo + refuerzo;
-
-    // Suma horizontal: Ancho + Fuelle Lateral 1 + Fuelle Lateral 2
-    const sumaHorizontal = ancho + fuelleLateral1 + fuelleLateral2;
-
-    // Fórmula: 1000 / ((((suma vertical) / 100) * ((suma horizontal) / 100) * Calibre) * Factor)
-    const resultado =
-      1000 /
-      (((sumaVertical / 100) * (sumaHorizontal / 100) * calibreNum) * factor);
-
-    setBolsasPorKilo(resultado.toFixed(3));
-  }, [datosProducto, catalogos.materiales]);
-
-  // Manejar cambios del producto
   const handleProductoChange = (datos: DatosProducto) => {
     setDatosProducto(datos);
   };
 
-  // Guardar producto
   const guardarProducto = async () => {
-    // Validaciones
     if (
       !datosProducto.tipoProductoId ||
       !datosProducto.materialId ||
@@ -180,35 +155,24 @@ export default function Plastico() {
     try {
       const payload = {
         tipo_producto_plastico_id: datosProducto.tipoProductoId,
-        material_plastico_id: datosProducto.materialId,
-        calibre_id: datosProducto.calibreId,
-        altura: parseInt(datosProducto.medidas.altura),
-        ancho: parseInt(datosProducto.medidas.ancho),
-        fuelle_fondo: datosProducto.medidas.fuelleFondo
-          ? parseInt(datosProducto.medidas.fuelleFondo)
-          : 0,
-        fuelle_latIz: datosProducto.medidas.fuelleLateral1
-          ? parseInt(datosProducto.medidas.fuelleLateral1)
-          : 0,
-        fuelle_latDe: datosProducto.medidas.fuelleLateral2
-          ? parseInt(datosProducto.medidas.fuelleLateral2)
-          : 0,
-        refuerzo: datosProducto.medidas.refuerzo
-          ? parseInt(datosProducto.medidas.refuerzo)
-          : 0,
-        medida: datosProducto.medidasFormateadas,
-        por_kilo: parseFloat(bolsasPorKilo),
+        material_plastico_id:      datosProducto.materialId,
+        calibre_id:                datosProducto.calibreId,
+        altura:       parseInt(datosProducto.medidas.altura),
+        ancho:        parseInt(datosProducto.medidas.ancho),
+        fuelle_fondo: datosProducto.medidas.fuelleFondo    ? parseInt(datosProducto.medidas.fuelleFondo)    : 0,
+        fuelle_latIz: datosProducto.medidas.fuelleLateral1 ? parseInt(datosProducto.medidas.fuelleLateral1) : 0,
+        fuelle_latDe: datosProducto.medidas.fuelleLateral2 ? parseInt(datosProducto.medidas.fuelleLateral2) : 0,
+        refuerzo:     datosProducto.medidas.refuerzo       ? parseInt(datosProducto.medidas.refuerzo)       : 0,
+        medida:       datosProducto.medidasFormateadas,
+        por_kilo:     parseFloat(bolsasPorKilo),
       };
-
-      console.log("💾 Guardando producto:", payload);
 
       const response = await createProductoPlastico(payload);
 
-      console.log("✅ Producto guardado:", response);
+      alert(
+        `✅ Producto creado exitosamente\n\n🔖 Identificador: ${response.producto.identificador}\n📦 Bolsas por kilo: ${response.producto.por_kilo}`
+      );
 
-      alert(`✅ Producto creado exitosamente\n\n🔖 Identificador: ${response.producto.identificador}\n📦 Bolsas por kilo: ${response.producto.por_kilo}`);
-
-      // Resetear formulario
       setDatosProducto({
         tipoProducto: "",
         tipoProductoId: 0,
@@ -216,6 +180,7 @@ export default function Plastico() {
         materialId: 0,
         calibre: "",
         calibreId: 0,
+        gramos: undefined,
         medidas: {
           altura: "",
           ancho: "",
@@ -228,28 +193,32 @@ export default function Plastico() {
         medidasFormateadas: "",
         nombreCompleto: "",
       });
-      setBolsasPorKilo("");
     } catch (error: any) {
       console.error("❌ Error al guardar producto:", error);
-
       const errorMessage =
         error.response?.data?.error ||
         error.response?.data?.details?.join(", ") ||
         "Error al guardar el producto";
-
       alert(`❌ Error: ${errorMessage}`);
     } finally {
       setGuardando(false);
     }
   };
 
-  // Función para redondear a centenas superiores
-  const redondearACentenas = (valor: number) => {
-    return Math.ceil(valor / 100) * 100;
-  };
+  const redondearACentenas = (valor: number) => Math.ceil(valor / 100) * 100;
 
-  // Calcular tabla de amortización
-  const kilosReferencia = [30, 50, 75, 100, 200, 300, 500, 1000];
+  const getCostoMerma = (kilos: number): { precio: number; merma: number } | null => {
+    if (esCelofanBopp) {
+      const precio = COSTOS_CELOFAN[kilos];
+      const merma  = MERMA_CELOFAN[kilos];
+      if (!precio || merma === undefined) return null;
+      return { precio, merma };
+    }
+
+    const tarifa = tarifasPlastico[kilos];
+    if (!tarifa) return null;
+    return tarifa;
+  };
 
   const calcularBolsasPorKilos = (kilos: number) => {
     if (!bolsasPorKilo) return "--";
@@ -260,22 +229,17 @@ export default function Plastico() {
   const calcularBolsasConMerma = (kilos: number) => {
     if (!bolsasPorKilo) return "--";
 
-    const bpk = parseFloat(bolsasPorKilo);
-    const bolsasBase = redondearACentenas(bpk * kilos);
+    const costoMerma = getCostoMerma(kilos);
+    if (!costoMerma) return "--";
 
-    const porcentajeMerma = MERMA_PRODUCCION[kilos] || 0;
-    const bolsasMerma = Math.ceil(bolsasBase * (porcentajeMerma / 100));
+    const bpk         = parseFloat(bolsasPorKilo);
+    const bolsasBase  = redondearACentenas(bpk * kilos);
+    const bolsasMerma = Math.ceil(bolsasBase * (costoMerma.merma / 100));
+    const total       = bolsasBase + bolsasMerma;
 
-    const total = bolsasBase + bolsasMerma;
-
-    return {
-      porcentajeMerma,
-      bolsasMerma,
-      total,
-    };
+    return { porcentajeMerma: costoMerma.merma, bolsasMerma, total };
   };
 
-  // Mostrar loading mientras cargan los catálogos
   if (cargandoCatalogos) {
     return (
       <Dashboard userName="Administrador">
@@ -289,20 +253,14 @@ export default function Plastico() {
     );
   }
 
-  // Mostrar error si falló la carga
   if (errorCatalogos) {
     return (
       <Dashboard userName="Administrador">
         <div className="flex items-center justify-center min-h-screen">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-            <h2 className="text-red-800 font-semibold mb-2">
-              Error al cargar catálogos
-            </h2>
+            <h2 className="text-red-800 font-semibold mb-2">Error al cargar catálogos</h2>
             <p className="text-red-600 mb-4">{errorCatalogos}</p>
-            <button
-              onClick={cargarCatalogos}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
+            <button onClick={cargarDatos} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
               Reintentar
             </button>
           </div>
@@ -316,7 +274,6 @@ export default function Plastico() {
       <h1 className="text-2xl font-bold mb-6">Dar de alta producto</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* FORMULARIO Y FIGURA - Usando SelectorProducto */}
         <div className="bg-white p-6 rounded-xl shadow col-span-2">
           <SelectorProducto
             catalogos={catalogos}
@@ -324,9 +281,7 @@ export default function Plastico() {
             mostrarFigura={true}
           />
 
-          {/* Información adicional */}
           <div className="grid grid-cols-2 gap-4 mt-6">
-            {/* Bolsas por kilo */}
             <div>
               <label className="block text-sm font-semibold mb-2 text-gray-700">
                 Bolsas por kilo
@@ -337,9 +292,21 @@ export default function Plastico() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50"
               />
             </div>
+
+            {esCelofanBopp && pesoPorBolsa && (
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  Peso por bolsa (g)
+                </label>
+                <input
+                  value={pesoPorBolsa}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium bg-gray-50"
+                />
+              </div>
+            )}
           </div>
 
-          {/* Botón de guardar */}
           <div className="mt-6 flex justify-end">
             <button
               onClick={guardarProducto}
@@ -363,65 +330,51 @@ export default function Plastico() {
         </div>
       </div>
 
-      {/* TABLA DE AMORTIZACIÓN */}
+      {/* TABLA DE PRODUCCIÓN */}
       <div className="mt-8 bg-white p-6 rounded-xl shadow">
-        <h2 className="text-lg font-bold mb-4">
-          Tabla de producción por kilogramos
-        </h2>
+        <h2 className="text-lg font-bold mb-1">Tabla de producción por kilogramos</h2>
+        <p className="text-xs text-gray-400 mb-4">
+          {esCelofanBopp
+            ? "⚠️ Costos de celofán en configuración temporal"
+            : "✅ Costos obtenidos de catálogo de producción"}
+        </p>
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-blue-600 text-white">
                 {kilosReferencia.map((kilos) => (
-                  <th
-                    key={kilos}
-                    className="px-4 py-3 text-center border border-blue-700"
-                  >
+                  <th key={kilos} className="px-4 py-3 text-center border border-blue-700">
                     {kilos}k
                   </th>
                 ))}
               </tr>
             </thead>
-
             <tbody>
-              {/* FILA: BOLSAS TOTALES */}
               <tr className="bg-gray-50">
                 {kilosReferencia.map((kilos) => (
-                  <td
-                    key={kilos}
-                    className="px-4 py-3 text-center border border-gray-300 font-medium"
-                  >
+                  <td key={kilos} className="px-4 py-3 text-center border border-gray-300 font-medium">
                     {calcularBolsasPorKilos(kilos)}
                   </td>
                 ))}
               </tr>
 
-              {/* FILA: PRECIO POR UNIDAD (C/U) */}
               <tr className="bg-white">
                 {kilosReferencia.map((kilos) => {
-                  const costo = COSTOS_PRODUCCION[kilos];
-                  const bpk = parseFloat(bolsasPorKilo);
+                  const costoMerma = getCostoMerma(kilos);
+                  const bpk        = parseFloat(bolsasPorKilo);
 
-                  if (!costo || !bpk) {
+                  if (!costoMerma || !bpk) {
                     return (
-                      <td
-                        key={kilos}
-                        className="px-4 py-3 text-center border border-gray-300 text-gray-400"
-                      >
+                      <td key={kilos} className="px-4 py-3 text-center border border-gray-300 text-gray-400">
                         --
                       </td>
                     );
                   }
 
-                  const precioUnitario = costo / bpk;
-
                   return (
-                    <td
-                      key={kilos}
-                      className="px-4 py-3 text-center border border-gray-300 text-green-600 font-semibold"
-                    >
-                      ${precioUnitario.toFixed(2)}
+                    <td key={kilos} className="px-4 py-3 text-center border border-gray-300 text-green-600 font-semibold">
+                      ${(costoMerma.precio / bpk).toFixed(2)}
                     </td>
                   );
                 })}
@@ -429,35 +382,19 @@ export default function Plastico() {
             </tbody>
           </table>
 
-          {/* MERMA */}
           <div className="mt-4 border-t pt-4">
-            <h3 className="text-sm font-semibold mb-2 text-gray-700">
-              Merma y total de bolsas
-            </h3>
-
+            <h3 className="text-sm font-semibold mb-2 text-gray-700">Merma y total de bolsas</h3>
             <div className="grid grid-cols-8 gap-2 text-center text-sm">
               {kilosReferencia.map((kilos) => {
                 const data = calcularBolsasConMerma(kilos);
-
                 if (data === "--") {
-                  return (
-                    <div key={kilos} className="text-gray-400">
-                      --
-                    </div>
-                  );
+                  return <div key={kilos} className="text-gray-400">--</div>;
                 }
-
                 return (
                   <div key={kilos} className="bg-gray-50 rounded-lg p-2 border">
-                    <p className="text-xs text-gray-500">
-                      Merma {data.porcentajeMerma}%
-                    </p>
-                    <p className="text-xs text-orange-600 font-medium">
-                      +{data.bolsasMerma.toLocaleString()}
-                    </p>
-                    <p className="text-sm font-semibold text-green-700">
-                      {data.total.toLocaleString()}
-                    </p>
+                    <p className="text-xs text-gray-500">Merma {data.porcentajeMerma}%</p>
+                    <p className="text-xs text-orange-600 font-medium">+{data.bolsasMerma.toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-green-700">{data.total.toLocaleString()}</p>
                   </div>
                 );
               })}

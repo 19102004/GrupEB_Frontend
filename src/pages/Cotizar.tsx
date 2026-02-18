@@ -31,7 +31,22 @@ export default function Cotizaciones() {
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
   const [errorCatalogos,    setErrorCatalogos]    = useState("");
 
+  // ✅ Estado para controlar qué filas tienen productos expandidos
+  const [expandidas, setExpandidas] = useState<Set<number>>(new Set());
+
   useEffect(() => { cargarCatalogos(); cargarCotizaciones(); }, []);
+
+  const toggleExpandida = (noCotizacion: number) => {
+    setExpandidas((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(noCotizacion)) {
+        nuevo.delete(noCotizacion);
+      } else {
+        nuevo.add(noCotizacion);
+      }
+      return nuevo;
+    });
+  };
 
   const cargarCatalogos = async () => {
     try {
@@ -74,7 +89,6 @@ export default function Cotizaciones() {
     );
   });
 
-  // ── Crear + PDF automático ──────────────────────────────────────────────
   const handleSubmit = async (datos: any) => {
     setGuardando(true);
     setErrorGuardar(null);
@@ -83,7 +97,6 @@ export default function Cotizaciones() {
       await cargarCotizaciones();
       setModalOpen(false);
 
-      // 🔥 Generar PDF con TODOS los campos del formulario
       try {
         await generarPdfCotizacion({
           no_cotizacion: respuesta.no_cotizacion,
@@ -93,31 +106,28 @@ export default function Cotizaciones() {
           telefono:      datos.telefono  || "",
           correo:        datos.correo    || "",
           estado:        "Pendiente",
+          impresion:     datos.impresion ?? null,
           total: datos.productos.reduce((sum: number, prod: any) =>
             sum + prod.cantidades.reduce((s: number, cant: number, i: number) =>
               cant > 0 && prod.precios[i] > 0 ? s + cant * prod.precios[i] : s
             , 0)
           , 0),
           productos: datos.productos.map((prod: any) => ({
-            // ── Identificación ──────────────────────────────
             nombre:             prod.nombre || `Producto #${prod.productoId}`,
-            // ── Specs técnicas ──────────────────────────────
             material:           prod.material           || "",
             calibre:            prod.calibre            || "",
             tintas:             prod.tintas             ?? prod.tintasId ?? "—",
             caras:              prod.caras              ?? prod.carasId  ?? "—",
             medidasFormateadas: prod.medidasFormateadas || "",
             medidas:            prod.medidas            || {},
-            // ── Extras ──────────────────────────────────────
             bk:                 prod.bk        || null,
             foil:               prod.foil      || null,
             laminado:           prod.laminado  || null,
             uvBr:               prod.uvBr      || null,
             pigmentos:          prod.pigmentos || null,
             pantones:           prod.pantones  || null,
-            // ── Observación ─────────────────────────────────
+            asa_suaje:          prod.suajeTipo || null,
             observacion:        prod.observacion || null,
-            // ── Detalles de precio ──────────────────────────
             detalles: prod.cantidades
               .map((cant: number, i: number) =>
                 cant > 0 && prod.precios[i] > 0
@@ -166,9 +176,6 @@ export default function Cotizaciones() {
     handleCerrarEditar();
   };
 
-  // ── Descargar PDF de cotización existente ───────────────────────────────
-  // Nota: los datos que vienen del GET ya no tienen medidas completas
-  // (solo lo que guardó el controller). Se muestra lo que hay disponible.
   const handleDescargarPdf = async (cot: Cotizacion) => {
     await generarPdfCotizacion({
       no_cotizacion: cot.no_cotizacion,
@@ -178,22 +185,24 @@ export default function Cotizaciones() {
       telefono:      cot.telefono,
       correo:        cot.correo,
       estado:        cot.estado,
+      impresion:     cot.impresion ?? null,
       total:         cot.total,
       productos: cot.productos.map((p: any) => ({
         nombre:             p.nombre,
-        material:           p.material           || "",
-        calibre:            p.calibre            || "",
+        material:           p.material             || "",
+        calibre:            p.calibre              || "",
         tintas:             p.tintas,
         caras:              p.caras,
-        medidasFormateadas: p.medidasFormateadas || p.medida || "",
-        medidas:            p.medidas            || {},
-        bk:                 p.bk        || null,
-        foil:               p.foil      || null,
-        laminado:           p.laminado  || null,
-        uvBr:               p.uv_br     || null,
-        pigmentos:          p.pigmentos || null,
-        pantones:           p.pantones  || null,
-        observacion:        p.observacion || null,
+        medidasFormateadas: p.medidasFormateadas    || "",
+        medidas:            p.medidas              || {},
+        bk:                 p.bk                   || null,
+        foil:               p.foil                 || null,
+        laminado:           p.laminado             || null,
+        uvBr:               p.uv_br                || null,
+        pigmentos:          p.pigmentos             || null,
+        pantones:           p.pantones              || null,
+        asa_suaje:          p.asa_suaje             || null,
+        observacion:        p.observacion           || null,
         detalles: p.detalles.map((d: any) => ({
           cantidad:     d.cantidad,
           precio_total: d.precio_total,
@@ -262,81 +271,110 @@ export default function Cotizaciones() {
                 </td>
               </tr>
             ) : cotizacionesFiltradas.length > 0 ? (
-              cotizacionesFiltradas.map((cot) => (
-                <tr key={cot.no_cotizacion} className="hover:bg-gray-50 transition-colors">
+              cotizacionesFiltradas.map((cot) => {
+                const estaExpandida = expandidas.has(cot.no_cotizacion);
+                return (
+                  <>
+                    {/* ── Fila principal ── */}
+                    <tr key={cot.no_cotizacion} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        #{cot.no_cotizacion}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatFecha(cot.fecha)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <p className="text-sm font-medium text-gray-900">{cot.cliente || "—"}</p>
+                        {cot.telefono && <p className="text-xs text-gray-400">{cot.telefono}</p>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {cot.empresa || "—"}
+                      </td>
 
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                    #{cot.no_cotizacion}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatFecha(cot.fecha)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <p className="text-sm font-medium text-gray-900">{cot.cliente || "—"}</p>
-                    {cot.telefono && <p className="text-xs text-gray-400">{cot.telefono}</p>}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cot.empresa || "—"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <span className="font-medium text-gray-700">{cot.productos.length} producto(s)</span>
-                    <div className="text-xs text-gray-400 mt-1 space-y-0.5">
-                      {cot.productos.slice(0, 2).map((p, i) => (
-                        <div key={i}>• {p.nombre.length > 35 ? p.nombre.slice(0, 35) + "…" : p.nombre}</div>
-                      ))}
-                      {cot.productos.length > 2 && (
-                        <div className="text-blue-400">+ {cot.productos.length - 2} más</div>
-                      )}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {cot.productos
-                        .flatMap((p) => p.detalles.map((d) => d.cantidad))
-                        .slice(0, 6)
-                        .map((cant, i) => (
-                          <span key={i} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                            {cant.toLocaleString()}
+                      {/* ✅ Columna productos compacta con botón expandir */}
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        <button
+                          onClick={() => toggleExpandida(cot.no_cotizacion)}
+                          className="flex items-center gap-2 group"
+                        >
+                          <span className="font-medium text-gray-700 group-hover:text-blue-600 transition-colors">
+                            {cot.productos.length} producto(s)
                           </span>
-                        ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                    ${cot.total.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {estadoBadge(cot.estado)}
-                  </td>
+                          <svg
+                            className={`w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-transform duration-200 ${estaExpandida ? "rotate-180" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      </td>
 
-                  {/* Acciones */}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handleEditar(cot)}
-                        className="text-blue-600 hover:text-blue-900 font-medium transition-colors"
-                      >
-                        Ver/Editar
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      {/* Descargar PDF */}
-                      <button
-                        onClick={() => handleDescargarPdf(cot)}
-                        className="text-green-600 hover:text-green-800 transition-colors"
-                        title="Descargar PDF"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        onClick={() => handleEliminar(cot.no_cotizacion)}
-                        className="text-red-600 hover:text-red-900 transition-colors"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        ${cot.total.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {estadoBadge(cot.estado)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center gap-3">
+                          {/* ✅ Ver/Editar → Gestionar */}
+                          <button onClick={() => handleEditar(cot)} className="text-blue-600 hover:text-blue-900 font-medium transition-colors">
+                            Gestionar
+                          </button>
+                          <span className="text-gray-300">|</span>
+                          <button onClick={() => handleDescargarPdf(cot)} className="text-green-600 hover:text-green-800 transition-colors" title="Descargar PDF">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                          <span className="text-gray-300">|</span>
+                          <button onClick={() => handleEliminar(cot.no_cotizacion)} className="text-red-600 hover:text-red-900 transition-colors">
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* ✅ Fila de detalle expandible */}
+                    {estaExpandida && (
+                      <tr key={`detalle-${cot.no_cotizacion}`} className="bg-blue-50 border-t border-blue-100">
+                        <td colSpan={8} className="px-8 py-4">
+                          <div className="space-y-3">
+                            {cot.productos.map((p: any, i: number) => (
+                              <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
+                                {/* Número de producto */}
+                                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center mt-0.5">
+                                  {i + 1}
+                                </span>
+
+                                {/* Nombre y detalle */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                  {p.medidasFormateadas && (
+                                    <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>
+                                  )}
+                                </div>
+
+                                {/* Cantidades y precios */}
+                                <div className="flex flex-wrap gap-2 flex-shrink-0">
+                                  {p.detalles.map((d: any, j: number) => (
+                                    <div key={j} className="text-center bg-gray-50 rounded px-2 py-1 border border-gray-200">
+                                      <p className="text-xs font-semibold text-gray-700">{d.cantidad.toLocaleString()}</p>
+                                      <p className="text-xs text-green-600">${d.precio_total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan={8} className="px-6 py-12 text-center text-gray-500">

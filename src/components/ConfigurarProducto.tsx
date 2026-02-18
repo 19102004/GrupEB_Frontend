@@ -37,11 +37,7 @@ export const CONFIG_PRODUCTOS: Record<string, ConfigProducto> = {
       { key: "fuelleFondo", label: "Fuelle fondo", position: "bottom" },
       { key: "refuerzo", label: "Refuerzo", position: "right-top" },
       { key: "fuelleLateral1", label: "Fuelle lateral", position: "right" },
-      {
-        key: "fuelleLateral2",
-        label: "Fuelle lateral",
-        position: "left-bottom",
-      },
+      { key: "fuelleLateral2", label: "Fuelle lateral", position: "left-bottom" },
     ],
   },
   "Bolsa celofán": {
@@ -52,11 +48,7 @@ export const CONFIG_PRODUCTOS: Record<string, ConfigProducto> = {
       { key: "fuelleFondo", label: "Fuelle fondo", position: "bottom" },
       { key: "refuerzo", label: "Refuerzo", position: "right-top" },
       { key: "fuelleLateral1", label: "Fuelle lateral", position: "right" },
-      {
-        key: "fuelleLateral2",
-        label: "Fuelle lateral",
-        position: "left-bottom",
-      },
+      { key: "fuelleLateral2", label: "Fuelle lateral", position: "left-bottom" },
     ],
   },
   "Bolsa envíos": {
@@ -75,11 +67,7 @@ export const CONFIG_PRODUCTOS: Record<string, ConfigProducto> = {
       { key: "ancho", label: "Ancho", position: "top" },
       { key: "fuelleFondo", label: "Fuelle fondo", position: "bottom" },
       { key: "fuelleLateral1", label: "Fuelle lateral", position: "right" },
-      {
-        key: "fuelleLateral2",
-        label: "Fuelle lateral",
-        position: "left-bottom",
-      },
+      { key: "fuelleLateral2", label: "Fuelle lateral", position: "left-bottom" },
     ],
   },
   Bobina: {
@@ -135,8 +123,8 @@ export default function SelectorProducto({
   const [materialId, setMaterialId] = useState(0);
   const [calibre, setCalibre] = useState("");
   const [calibreId, setCalibreId] = useState(0);
+  const [calibreGramos, setCalibreGramos] = useState<number | null>(null); // ✅ NUEVO
 
-  // ✅ NUEVO ESTADO: Calibres dinámicos
   const [calibresDisponibles, setCalibresDisponibles] = useState<CatalogoCalibre[]>([]);
   const [cargandoCalibres, setCargandoCalibres] = useState(false);
 
@@ -158,13 +146,11 @@ export default function SelectorProducto({
   const materialRef = useRef<HTMLDivElement>(null);
   const calibreRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Variable para determinar si el dropdown de material debe estar deshabilitado
   const materialDeshabilitado = tipoProducto === "Bolsa celofán";
 
-  // ✅ NUEVO USEEFFECT: Cargar calibres según el contexto
+  // ✅ Cargar calibres según el contexto (normal o BOPP)
   useEffect(() => {
     const cargarCalibres = async () => {
-      // Determinar si debemos cargar calibres BOPP o normales
       const esBOPP = tipoProducto === "Bolsa celofán" && material.toUpperCase() === "BOPP";
       const tipoCalibre = esBOPP ? "bopp" : "normal";
 
@@ -175,9 +161,10 @@ export default function SelectorProducto({
         const calibres = await getCalibres(tipoCalibre);
         setCalibresDisponibles(calibres);
 
-        // ✅ Resetear calibre seleccionado al cambiar tipo
+        // Resetear calibre y gramos al cambiar tipo
         setCalibre("");
         setCalibreId(0);
+        setCalibreGramos(null); // ✅ resetear gramos
 
         console.log("✅ Calibres cargados:", calibres.length);
       } catch (error) {
@@ -188,11 +175,9 @@ export default function SelectorProducto({
       }
     };
 
-    // Solo cargar si hay tipo y material seleccionados
     if (tipoProducto && material) {
       cargarCalibres();
     } else {
-      // Si no hay selección, usar calibres normales por defecto
       setCalibresDisponibles(catalogos.calibres);
     }
   }, [tipoProducto, material, catalogos.calibres]);
@@ -206,61 +191,34 @@ export default function SelectorProducto({
       setMaterialId(datosIniciales.materialId);
       setCalibre(datosIniciales.calibre);
       setCalibreId(datosIniciales.calibreId);
+      setCalibreGramos(datosIniciales.gramos ?? null); // ✅
       setMedidas(datosIniciales.medidas);
     }
   }, [datosIniciales]);
 
-  // ✅ Función para filtrar tipos de producto según el material seleccionado
   const getTiposProductoFiltrados = () => {
     const materialEsBopp = material.toUpperCase() === "BOPP";
-
-    // Si el material es BOPP, permitir TODOS los tipos de producto
-    if (materialEsBopp) {
-      return catalogos.tiposProducto;
-    }
-
-    // Si hay otro material seleccionado (no BOPP), excluir "Bolsa celofán"
+    if (materialEsBopp) return catalogos.tiposProducto;
     if (material && !materialEsBopp) {
-      return catalogos.tiposProducto.filter(
-        (tipo) => tipo.nombre !== "Bolsa celofán"
-      );
+      return catalogos.tiposProducto.filter((tipo) => tipo.nombre !== "Bolsa celofán");
     }
-
-    // Si no hay material seleccionado, mostrar todos
     return catalogos.tiposProducto;
   };
 
-  // ✅ Función para filtrar materiales según el tipo de producto seleccionado
   const getMaterialesFiltrados = () => {
     const tipoEsCelofan = tipoProducto === "Bolsa celofán";
-
-    // Si el tipo es "Bolsa celofán", solo mostrar BOPP
     if (tipoEsCelofan) {
-      return catalogos.materiales.filter(
-        (mat) => mat.nombre.toUpperCase() === "BOPP"
-      );
+      return catalogos.materiales.filter((mat) => mat.nombre.toUpperCase() === "BOPP");
     }
-
-    // Si el tipo NO es "Bolsa celofán" y hay un tipo seleccionado, excluir BOPP
     if (tipoProducto && !tipoEsCelofan) {
-      return catalogos.materiales.filter(
-        (mat) => mat.nombre.toUpperCase() !== "BOPP"
-      );
+      return catalogos.materiales.filter((mat) => mat.nombre.toUpperCase() !== "BOPP");
     }
-
-    // Si no hay tipo seleccionado, mostrar todos
     return catalogos.materiales;
   };
 
-  // Construir medidas formateadas
   const construirMedidasFormateadas = () => {
-    const verticales = FORMATO_MEDIDAS.verticales
-      .map((k) => medidas[k])
-      .filter((v) => v);
-
-    const horizontales = FORMATO_MEDIDAS.horizontales
-      .map((k) => medidas[k])
-      .filter((v) => v);
+    const verticales = FORMATO_MEDIDAS.verticales.map((k) => medidas[k]).filter((v) => v);
+    const horizontales = FORMATO_MEDIDAS.horizontales.map((k) => medidas[k]).filter((v) => v);
 
     if (!verticales.length && !horizontales.length) return "";
     if (!horizontales.length) return verticales.join("+");
@@ -269,17 +227,14 @@ export default function SelectorProducto({
     return `${verticales.join("+")}x${horizontales.join("+")}`;
   };
 
-  // Construir nombre completo del producto
   const construirNombreCompleto = () => {
     if (!tipoProducto || !material) return "";
-
     const medidasFormateadas = construirMedidasFormateadas();
     if (!medidasFormateadas) return "";
-
     return `${tipoProducto} ${medidasFormateadas} ${material.toLowerCase()}`;
   };
 
-  // Notificar cambios al componente padre
+  // ✅ Notificar cambios al padre incluyendo gramos
   useEffect(() => {
     const nombreCompleto = construirNombreCompleto();
     const medidasFormateadas = construirMedidasFormateadas();
@@ -291,11 +246,12 @@ export default function SelectorProducto({
       materialId,
       calibre,
       calibreId,
+      gramos: calibreGramos ?? undefined, // ✅ pasar gramos al padre
       medidas: { ...medidas },
       medidasFormateadas,
       nombreCompleto,
     });
-  }, [tipoProducto, tipoProductoId, material, materialId, calibre, calibreId, medidas]);
+  }, [tipoProducto, tipoProductoId, material, materialId, calibre, calibreId, calibreGramos, medidas]);
 
   // Cerrar dropdowns al hacer clic fuera
   useEffect(() => {
@@ -312,9 +268,7 @@ export default function SelectorProducto({
     };
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const setMedida = (key: MedidaKey, value: string) => {
@@ -349,19 +303,12 @@ export default function SelectorProducto({
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               <svg
-                className={`w-5 h-5 transition-transform ${
-                  mostrarDropdownTipo ? "rotate-180" : ""
-                }`}
+                className={`w-5 h-5 transition-transform ${mostrarDropdownTipo ? "rotate-180" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
           </div>
@@ -386,7 +333,7 @@ export default function SelectorProducto({
                       solapa: "",
                     });
 
-                    // ✅ Si es "Bolsa celofán", seleccionar automáticamente BOPP
+                    // Si es "Bolsa celofán", seleccionar BOPP automáticamente
                     if (tipo.nombre === "Bolsa celofán") {
                       const materialBopp = catalogos.materiales.find(
                         (m) => m.nombre.toUpperCase() === "BOPP"
@@ -395,12 +342,15 @@ export default function SelectorProducto({
                         setMaterial(materialBopp.nombre);
                         setMaterialId(materialBopp.id);
                       }
-                    }
-                    // Si cambia a otro tipo y el material actual es BOPP, resetear material
-                    else if (material.toUpperCase() === "BOPP") {
+                    } else if (material.toUpperCase() === "BOPP") {
                       setMaterial("");
                       setMaterialId(0);
                     }
+
+                    // Resetear calibre y gramos al cambiar tipo
+                    setCalibre("");
+                    setCalibreId(0);
+                    setCalibreGramos(null); // ✅
                   }}
                   className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                 >
@@ -447,19 +397,12 @@ export default function SelectorProducto({
               } text-white`}
             >
               <svg
-                className={`w-5 h-5 transition-transform ${
-                  mostrarDropdownMaterial ? "rotate-180" : ""
-                }`}
+                className={`w-5 h-5 transition-transform ${mostrarDropdownMaterial ? "rotate-180" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
           </div>
@@ -473,7 +416,7 @@ export default function SelectorProducto({
                     setMaterialId(mat.id);
                     setMostrarDropdownMaterial(false);
 
-                    // ✅ Si selecciona un material diferente a BOPP y el tipo actual es "Bolsa celofán", resetear tipo
+                    // Si cambia a no-BOPP y el tipo era "Bolsa celofán", resetear tipo
                     if (
                       mat.nombre.toUpperCase() !== "BOPP" &&
                       tipoProducto === "Bolsa celofán"
@@ -490,6 +433,11 @@ export default function SelectorProducto({
                         solapa: "",
                       });
                     }
+
+                    // Resetear calibre y gramos al cambiar material
+                    setCalibre("");
+                    setCalibreId(0);
+                    setCalibreGramos(null); // ✅
                   }}
                   className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                 >
@@ -504,13 +452,9 @@ export default function SelectorProducto({
         <div ref={calibreRef} className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Calibre
-            {/* ✅ Indicador de tipo de calibre */}
-            {tipoProducto === "Bolsa celofán" &&
-              material.toUpperCase() === "BOPP" && (
-                <span className="ml-2 text-xs text-blue-600 font-normal">
-                  (BOPP)
-                </span>
-              )}
+            {tipoProducto === "Bolsa celofán" && material.toUpperCase() === "BOPP" && (
+              <span className="ml-2 text-xs text-blue-600 font-normal">(BOPP)</span>
+            )}
           </label>
           <div className="flex gap-2">
             <input
@@ -521,54 +465,30 @@ export default function SelectorProducto({
               disabled={cargandoCalibres}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed"
               onClick={() =>
-                !cargandoCalibres &&
-                setMostrarDropdownCalibre(!mostrarDropdownCalibre)
+                !cargandoCalibres && setMostrarDropdownCalibre(!mostrarDropdownCalibre)
               }
             />
             <button
               type="button"
               onClick={() =>
-                !cargandoCalibres &&
-                setMostrarDropdownCalibre(!mostrarDropdownCalibre)
+                !cargandoCalibres && setMostrarDropdownCalibre(!mostrarDropdownCalibre)
               }
               disabled={cargandoCalibres}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {cargandoCalibres ? (
-                <svg
-                  className="w-5 h-5 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
+                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : (
                 <svg
-                  className={`w-5 h-5 transition-transform ${
-                    mostrarDropdownCalibre ? "rotate-180" : ""
-                  }`}
+                  className={`w-5 h-5 transition-transform ${mostrarDropdownCalibre ? "rotate-180" : ""}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               )}
             </button>
@@ -582,11 +502,16 @@ export default function SelectorProducto({
                     onClick={() => {
                       setCalibre(cal.valor.toString());
                       setCalibreId(cal.id);
+                      setCalibreGramos(cal.gramos ?? null); // ✅ guardar gramos del calibre BOPP
                       setMostrarDropdownCalibre(false);
                     }}
                     className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                   >
                     {cal.valor}
+                    {/* ✅ Mostrar gramos en el dropdown si están disponibles */}
+                    {cal.gramos && (
+                      <span className="ml-2 text-xs text-gray-400">({cal.gramos}g)</span>
+                    )}
                   </li>
                 ))
               ) : (
@@ -601,9 +526,7 @@ export default function SelectorProducto({
         {/* Nombre generado automáticamente */}
         {construirNombreCompleto() && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-sm font-semibold text-gray-700 mb-1">
-              Nombre del producto:
-            </p>
+            <p className="text-sm font-semibold text-gray-700 mb-1">Nombre del producto:</p>
             <p className="text-sm text-gray-900">{construirNombreCompleto()}</p>
           </div>
         )}
@@ -611,9 +534,7 @@ export default function SelectorProducto({
         {/* Medidas formateadas */}
         {construirMedidasFormateadas() && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Medidas
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Medidas</label>
             <input
               value={construirMedidasFormateadas()}
               readOnly
@@ -639,23 +560,20 @@ export default function SelectorProducto({
                   <div
                     key={m.key}
                     className={`absolute flex items-center gap-1 ${
-                      m.position === "top" &&
-                      "top-4 left-1/2 -translate-x-1/2 flex-col"
+                      m.position === "top" && "top-4 left-1/2 -translate-x-1/2 flex-col"
                     } ${
-                      m.position === "left" &&
-                      "left-4 top-1/2 -translate-y-1/2 flex-row"
+                      m.position === "left" && "left-4 top-1/2 -translate-y-1/2 flex-row"
                     } ${
-                      m.position === "bottom" &&
-                      "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse"
+                      m.position === "bottom" && "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse"
                     } ${
-                      m.position === "right" &&
-                      "right-4 top-1/2 -translate-y-1/2 flex-row-reverse"
+                      m.position === "right" && "right-4 top-1/2 -translate-y-1/2 flex-row-reverse"
                     } ${
-                      m.position === "right-top" &&
-                      "right-4 top-16 flex-row-reverse"
+                      m.position === "right-top" && "right-4 top-16 flex-row-reverse"
                     } ${
                       m.position === "left-bottom" && "left-4 bottom-16 flex-row"
-                    } ${m.position === "top-inside" && "top-16 right-4 flex-col"}`}
+                    } ${
+                      m.position === "top-inside" && "top-16 right-4 flex-col"
+                    }`}
                   >
                     <label className="text-xs font-medium text-gray-700 whitespace-nowrap">
                       {m.label}
@@ -671,9 +589,7 @@ export default function SelectorProducto({
                 ))}
               </>
             ) : (
-              <p className="text-gray-400 text-center">
-                Selecciona un tipo de producto
-              </p>
+              <p className="text-gray-400 text-center">Selecciona un tipo de producto</p>
             )}
           </div>
         </div>

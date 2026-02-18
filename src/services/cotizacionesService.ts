@@ -10,15 +10,18 @@ export const getCotizaciones = async () => {
 
 // ============================================================
 // CREAR COTIZACIÓN
+// idsuaje es la FK hacia asa_suaje (integer | null)
 // ============================================================
 export const crearCotizacion = async (datos: {
   clienteId?: number;
   productos: {
-    productoId?: number;
-    cantidades: [number, number, number];
-    precios: [number, number, number];
-    tintasId: number;
-    carasId: number;
+    productoId?:  number;
+    cantidades:   [number, number, number];
+    precios:      [number, number, number];
+    tintasId:     number;
+    carasId:      number;
+    // 🔥 idsuaje: FK integer hacia asa_suaje, puede ser null si no aplica
+    idsuaje?:     number | null;
     observacion?: string;
     [key: string]: any;
   }[];
@@ -53,6 +56,8 @@ export const crearCotizacion = async (datos: {
       productoId:  prod.productoId,
       tintasId:    prod.tintasId,
       carasId:     prod.carasId,
+      // 🔥 Se manda el id del suaje seleccionado (FK integer) o null
+      idsuaje:     prod.idsuaje ?? null,
       observacion: prod.observacion || null,
       detalles,
     };
@@ -72,7 +77,7 @@ export const crearCotizacion = async (datos: {
 // ============================================================
 export const aprobarDetalle = async (
   detalleId: number,
-  aprobado: boolean
+  aprobado:  boolean
 ) => {
   const response = await api.patch(
     `/cotizaciones/detalle/${detalleId}/aprobar`,
@@ -85,7 +90,7 @@ export const aprobarDetalle = async (
 // ACTUALIZAR OBSERVACIÓN DE UN PRODUCTO
 // ============================================================
 export const actualizarObservacion = async (
-  productoId: number,
+  productoId:  number,
   observacion: string
 ) => {
   const response = await api.patch(
@@ -97,11 +102,11 @@ export const actualizarObservacion = async (
 
 // ============================================================
 // ACTUALIZAR ESTADO DE LA COTIZACIÓN
-// estadoId: 1=Pendiente | 2=Aprobada | 3=Rechazada
+// estadoId: 1=Pendiente | 2=En proceso | 3=Aprobado | 4=Rechazado
 // ============================================================
 export const actualizarEstado = async (
   noCotizacion: number,
-  estadoId: number
+  estadoId:     number
 ) => {
   const response = await api.patch(
     `/cotizaciones/${noCotizacion}/estado`,
