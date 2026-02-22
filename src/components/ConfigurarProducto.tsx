@@ -123,7 +123,7 @@ export default function SelectorProducto({
   const [materialId, setMaterialId] = useState(0);
   const [calibre, setCalibre] = useState("");
   const [calibreId, setCalibreId] = useState(0);
-  const [calibreGramos, setCalibreGramos] = useState<number | null>(null); // ✅ NUEVO
+  const [calibreGramos, setCalibreGramos] = useState<number | null>(null);
 
   const [calibresDisponibles, setCalibresDisponibles] = useState<CatalogoCalibre[]>([]);
   const [cargandoCalibres, setCargandoCalibres] = useState(false);
@@ -148,25 +148,17 @@ export default function SelectorProducto({
 
   const materialDeshabilitado = tipoProducto === "Bolsa celofán";
 
-  // ✅ Cargar calibres según el contexto (normal o BOPP)
   useEffect(() => {
     const cargarCalibres = async () => {
       const esBOPP = tipoProducto === "Bolsa celofán" && material.toUpperCase() === "BOPP";
       const tipoCalibre = esBOPP ? "bopp" : "normal";
-
-      console.log("🔄 Cargando calibres:", { esBOPP, tipoCalibre });
-
       try {
         setCargandoCalibres(true);
         const calibres = await getCalibres(tipoCalibre);
         setCalibresDisponibles(calibres);
-
-        // Resetear calibre y gramos al cambiar tipo
         setCalibre("");
         setCalibreId(0);
-        setCalibreGramos(null); // ✅ resetear gramos
-
-        console.log("✅ Calibres cargados:", calibres.length);
+        setCalibreGramos(null);
       } catch (error) {
         console.error("❌ Error al cargar calibres:", error);
         setCalibresDisponibles([]);
@@ -182,7 +174,6 @@ export default function SelectorProducto({
     }
   }, [tipoProducto, material, catalogos.calibres]);
 
-  // Cargar datos iniciales si existen
   useEffect(() => {
     if (datosIniciales) {
       setTipoProducto(datosIniciales.tipoProducto);
@@ -191,7 +182,7 @@ export default function SelectorProducto({
       setMaterialId(datosIniciales.materialId);
       setCalibre(datosIniciales.calibre);
       setCalibreId(datosIniciales.calibreId);
-      setCalibreGramos(datosIniciales.gramos ?? null); // ✅
+      setCalibreGramos(datosIniciales.gramos ?? null);
       setMedidas(datosIniciales.medidas);
     }
   }, [datosIniciales]);
@@ -219,11 +210,9 @@ export default function SelectorProducto({
   const construirMedidasFormateadas = () => {
     const verticales = FORMATO_MEDIDAS.verticales.map((k) => medidas[k]).filter((v) => v);
     const horizontales = FORMATO_MEDIDAS.horizontales.map((k) => medidas[k]).filter((v) => v);
-
     if (!verticales.length && !horizontales.length) return "";
     if (!horizontales.length) return verticales.join("+");
     if (!verticales.length) return horizontales.join("+");
-
     return `${verticales.join("+")}x${horizontales.join("+")}`;
   };
 
@@ -234,11 +223,9 @@ export default function SelectorProducto({
     return `${tipoProducto} ${medidasFormateadas} ${material.toLowerCase()}`;
   };
 
-  // ✅ Notificar cambios al padre incluyendo gramos
   useEffect(() => {
     const nombreCompleto = construirNombreCompleto();
     const medidasFormateadas = construirMedidasFormateadas();
-
     onProductoChange({
       tipoProducto,
       tipoProductoId,
@@ -246,14 +233,13 @@ export default function SelectorProducto({
       materialId,
       calibre,
       calibreId,
-      gramos: calibreGramos ?? undefined, // ✅ pasar gramos al padre
+      gramos: calibreGramos ?? undefined,
       medidas: { ...medidas },
       medidasFormateadas,
       nombreCompleto,
     });
   }, [tipoProducto, tipoProductoId, material, materialId, calibre, calibreId, calibreGramos, medidas]);
 
-  // Cerrar dropdowns al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -266,14 +252,43 @@ export default function SelectorProducto({
         setMostrarDropdownCalibre(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ✅ Sincronizar fuelles laterales entre sí
+  // ✅ Exclusividad: fuelle lateral <-> refuerzo/fuelle fondo
   const setMedida = (key: MedidaKey, value: string) => {
-    setMedidas((prev) => ({ ...prev, [key]: value }));
+    setMedidas((prev) => {
+      const nuevo = { ...prev, [key]: value };
+      const v = value.trim();
+
+      if (key === "fuelleLateral1" || key === "fuelleLateral2") {
+        // Sincronizar ambos laterales
+        nuevo.fuelleLateral1 = v;
+        nuevo.fuelleLateral2 = v;
+        // Si tiene valor, limpiar refuerzo y fuelle fondo
+        if (v !== "" && Number(v) > 0) {
+          nuevo.refuerzo    = "0";
+          nuevo.fuelleFondo = "0";
+        }
+      }
+
+      if (key === "refuerzo" || key === "fuelleFondo") {
+        // Si tiene valor, limpiar fuelles laterales
+        if (v !== "" && Number(v) > 0) {
+          nuevo.fuelleLateral1 = "0";
+          nuevo.fuelleLateral2 = "0";
+        }
+      }
+
+      return nuevo;
+    });
   };
+
+  // Helpers para saber si un campo está bloqueado
+  const tieneLateral = Number(medidas.fuelleLateral1) > 0 || Number(medidas.fuelleLateral2) > 0;
+  const tieneFondoORefuerzo = Number(medidas.fuelleFondo) > 0 || Number(medidas.refuerzo) > 0;
 
   return (
     <div
@@ -321,8 +336,6 @@ export default function SelectorProducto({
                     setTipoProducto(tipo.nombre);
                     setTipoProductoId(tipo.id);
                     setMostrarDropdownTipo(false);
-
-                    // Resetear medidas al cambiar tipo
                     setMedidas({
                       altura: "",
                       ancho: "",
@@ -332,8 +345,6 @@ export default function SelectorProducto({
                       refuerzo: "",
                       solapa: "",
                     });
-
-                    // Si es "Bolsa celofán", seleccionar BOPP automáticamente
                     if (tipo.nombre === "Bolsa celofán") {
                       const materialBopp = catalogos.materiales.find(
                         (m) => m.nombre.toUpperCase() === "BOPP"
@@ -346,11 +357,9 @@ export default function SelectorProducto({
                       setMaterial("");
                       setMaterialId(0);
                     }
-
-                    // Resetear calibre y gramos al cambiar tipo
                     setCalibre("");
                     setCalibreId(0);
-                    setCalibreGramos(null); // ✅
+                    setCalibreGramos(null);
                   }}
                   className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                 >
@@ -415,8 +424,6 @@ export default function SelectorProducto({
                     setMaterial(mat.nombre);
                     setMaterialId(mat.id);
                     setMostrarDropdownMaterial(false);
-
-                    // Si cambia a no-BOPP y el tipo era "Bolsa celofán", resetear tipo
                     if (
                       mat.nombre.toUpperCase() !== "BOPP" &&
                       tipoProducto === "Bolsa celofán"
@@ -433,11 +440,9 @@ export default function SelectorProducto({
                         solapa: "",
                       });
                     }
-
-                    // Resetear calibre y gramos al cambiar material
                     setCalibre("");
                     setCalibreId(0);
-                    setCalibreGramos(null); // ✅
+                    setCalibreGramos(null);
                   }}
                   className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                 >
@@ -502,13 +507,12 @@ export default function SelectorProducto({
                     onClick={() => {
                       setCalibre(cal.valor.toString());
                       setCalibreId(cal.id);
-                      setCalibreGramos(cal.gramos ?? null); // ✅ guardar gramos del calibre BOPP
+                      setCalibreGramos(cal.gramos ?? null);
                       setMostrarDropdownCalibre(false);
                     }}
                     className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900"
                   >
                     {cal.valor}
-                    {/* ✅ Mostrar gramos en el dropdown si están disponibles */}
                     {cal.gramos && (
                       <span className="ml-2 text-xs text-gray-400">({cal.gramos}g)</span>
                     )}
@@ -556,37 +560,53 @@ export default function SelectorProducto({
                   className="max-w-[200px] max-h-[300px] object-contain"
                 />
 
-                {CONFIG_PRODUCTOS[tipoProducto].medidas.map((m) => (
-                  <div
-                    key={m.key}
-                    className={`absolute flex items-center gap-1 ${
-                      m.position === "top" && "top-4 left-1/2 -translate-x-1/2 flex-col"
-                    } ${
-                      m.position === "left" && "left-4 top-1/2 -translate-y-1/2 flex-row"
-                    } ${
-                      m.position === "bottom" && "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse"
-                    } ${
-                      m.position === "right" && "right-4 top-1/2 -translate-y-1/2 flex-row-reverse"
-                    } ${
-                      m.position === "right-top" && "right-4 top-16 flex-row-reverse"
-                    } ${
-                      m.position === "left-bottom" && "left-4 bottom-16 flex-row"
-                    } ${
-                      m.position === "top-inside" && "top-16 right-4 flex-col"
-                    }`}
-                  >
-                    <label className="text-xs font-medium text-gray-700 whitespace-nowrap">
-                      {m.label}
-                    </label>
-                    <input
-                      type="number"
-                      value={medidas[m.key]}
-                      onChange={(e) => setMedida(m.key, e.target.value)}
-                      className="w-16 px-2 py-1 text-sm text-center border-2 border-gray-300 rounded focus:border-blue-500 focus:outline-none"
-                      placeholder="0"
-                    />
-                  </div>
-                ))}
+                {CONFIG_PRODUCTOS[tipoProducto].medidas.map((m) => {
+                  // Determinar si este campo está bloqueado por exclusividad
+                  const esLateral = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
+                  const esFondoORefuerzo = m.key === "fuelleFondo" || m.key === "refuerzo";
+                  const bloqueado = (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
+
+                  return (
+                    <div
+                      key={m.key}
+                      className={`absolute flex items-center gap-1 ${
+                        m.position === "top" && "top-4 left-1/2 -translate-x-1/2 flex-col"
+                      } ${
+                        m.position === "left" && "left-4 top-1/2 -translate-y-1/2 flex-row"
+                      } ${
+                        m.position === "bottom" && "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse"
+                      } ${
+                        m.position === "right" && "right-4 top-1/2 -translate-y-1/2 flex-row-reverse"
+                      } ${
+                        m.position === "right-top" && "right-4 top-16 flex-row-reverse"
+                      } ${
+                        m.position === "left-bottom" && "left-4 bottom-16 flex-row"
+                      } ${
+                        m.position === "top-inside" && "top-16 right-4 flex-col"
+                      }`}
+                    >
+                      <label className={`text-xs font-medium whitespace-nowrap ${bloqueado ? "text-gray-300" : "text-gray-700"}`}>
+                        {m.label}
+                        {/* Sincronización lateral */}
+                        {(m.key === "fuelleLateral1" || m.key === "fuelleLateral2") && !bloqueado && (
+                          <span className="ml-1 text-blue-400 text-xs" title="Se sincroniza con el otro fuelle lateral">⇄</span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        value={medidas[m.key]}
+                        onChange={(e) => !bloqueado && setMedida(m.key, e.target.value)}
+                        disabled={bloqueado}
+                        className={`w-16 px-2 py-1 text-sm text-center border-2 rounded focus:outline-none ${
+                          bloqueado
+                            ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
+                            : "border-gray-300 focus:border-blue-500"
+                        }`}
+                        placeholder="0"
+                      />
+                    </div>
+                  );
+                })}
               </>
             ) : (
               <p className="text-gray-400 text-center">Selecciona un tipo de producto</p>

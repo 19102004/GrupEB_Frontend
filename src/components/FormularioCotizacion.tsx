@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import SelectorProducto from "./ConfigurarProducto";
+import SelectorProducto, { CONFIG_PRODUCTOS } from "./ConfigurarProducto";
 import type { DatosProducto, MedidaKey } from "../types/productos-plastico.types";
+import { FORMATO_MEDIDAS } from "../types/productos-plastico.types";
 import { searchClientes, createClienteLigero } from "../services/clientesService";
 import { searchProductosPlastico, crearOObtenerProducto } from "../services/productosPlasticoService";
 import { getCatalogosProduccion } from "../services/catalogosProduccionService";
@@ -23,24 +24,26 @@ interface FormularioCotizacionProps {
 }
 
 interface Producto {
-  productoId?:  number;
-  nombre:       string;
-  cantidades:   [number, number, number];
-  precios:      [number, number, number];
-  calibre:      string;
-  tintas:       number;
-  tintasId:     number;
-  caras:        number;
-  carasId:      number;
-  material:     string;
-  medidas:      Record<MedidaKey, string>;
+  productoId?:   number;
+  nombre:        string;
+  cantidades:    [number, number, number];
+  kilogramos:    [number, number, number];
+  precios:       [number, number, number];
+  calibre:       string;
+  tintas:        number;
+  tintasId:      number;
+  caras:         number;
+  carasId:       number;
+  material:      string;
+  medidas:       Record<MedidaKey, string>;
   medidasFormateadas: string;
-  porKilo?:     string;
-  // 🔥 idsuaje: FK integer hacia asa_suaje (null si no aplica)
-  // 🔥 suajeTipo: texto para mostrar en UI y PDF
-  idsuaje?:    number | null;
-  suajeTipo?:  string | null;
-  observacion?: string;
+  porKilo?:      string;
+  idsuaje?:      number | null;
+  suajeTipo?:    string | null;
+  observacion?:  string;
+  pantones?:     string | null;
+  pigmentos?:    string | null;
+  modoCantidad:  "unidad" | "kilo";
 }
 
 interface DatosCotizacion {
@@ -68,17 +71,10 @@ export default function FormularioCotizacion({
     observaciones: "",
   });
 
-  // ====================================
-  // ESTADOS PARA CATÁLOGOS
-  // ====================================
-  const [caras,   setCaras]   = useState<Cara[]>([]);
-  const [tintas,  setTintas]  = useState<Tinta[]>([]);
-  // 🔥 Lista de suajes desde la BD (filtrados por Plástico en el backend)
-  const [suajes,  setSuajes]  = useState<Suaje[]>([]);
+  const [caras,  setCaras]  = useState<Cara[]>([]);
+  const [tintas, setTintas] = useState<Tinta[]>([]);
+  const [suajes, setSuajes] = useState<Suaje[]>([]);
 
-  // ====================================
-  // ESTADOS PARA CLIENTES
-  // ====================================
   const [mostrarModalClientes, setMostrarModalClientes] = useState(false);
   const [busquedaCliente,      setBusquedaCliente]      = useState("");
   const [clientesCargados,     setClientesCargados]     = useState<ClienteBusqueda[]>([]);
@@ -87,27 +83,31 @@ export default function FormularioCotizacion({
   const [creandoCliente,       setCreandoCliente]       = useState(false);
   const [errorCrearCliente,    setErrorCrearCliente]    = useState<string | null>(null);
 
-  // ====================================
-  // ESTADOS PARA PRODUCTOS
-  // ====================================
-  const [modoProducto,           setModoProducto]           = useState<"registrado" | "nuevo">("registrado");
-  const [mostrarModalProductos,  setMostrarModalProductos]  = useState(false);
-  const [busquedaProducto,       setBusquedaProducto]       = useState("");
-  const [productosCargados,      setProductosCargados]      = useState<ProductoBusqueda[]>([]);
-  const [loadingProductos,       setLoadingProductos]       = useState(false);
-  const [errorProductos,         setErrorProductos]         = useState<string | null>(null);
-  const [mostrarDropdownCaras,   setMostrarDropdownCaras]   = useState(false);
-  const [mostrarDropdownTintas,  setMostrarDropdownTintas]  = useState(false);
-  // 🔥 Dropdown de suajes
-  const [mostrarDropdownSuaje,   setMostrarDropdownSuaje]   = useState(false);
-  const [guardandoProducto,      setGuardandoProducto]      = useState(false);
+  const [modoProducto,          setModoProducto]          = useState<"registrado" | "nuevo">("registrado");
+  const [productoNuevoListo,    setProductoNuevoListo]    = useState(false);
+  const [mostrarModalProductos, setMostrarModalProductos] = useState(false);
+  const [busquedaProducto,      setBusquedaProducto]      = useState("");
+  const [productosCargados,     setProductosCargados]     = useState<ProductoBusqueda[]>([]);
+  const [loadingProductos,      setLoadingProductos]      = useState(false);
+  const [errorProductos,        setErrorProductos]        = useState<string | null>(null);
+  const [mostrarDropdownCaras,  setMostrarDropdownCaras]  = useState(false);
+  const [mostrarDropdownTintas, setMostrarDropdownTintas] = useState(false);
+  const [mostrarDropdownSuaje,  setMostrarDropdownSuaje]  = useState(false);
+  const [guardandoProducto,     setGuardandoProducto]     = useState(false);
 
   const [preciosEditadosManualmente, setPreciosEditadosManualmente] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [preciosTexto,               setPreciosTexto]               = useState<[string, string, string]>(["", "", ""]);
 
+  const [modoColor,      setModoColor]      = useState<"pantones" | "pigmentos" | null>(null);
+  const [inputsPantones, setInputsPantones] = useState<string[]>([]);
+
+  const [modoCantidad, setModoCantidad] = useState<"unidad" | "kilo">("unidad");
+  const [cantidadesTexto, setCantidadesTexto] = useState<[string, string, string]>(["", "", ""]);
+
   const estadoInicialProducto: Producto = {
     nombre:             "",
     cantidades:         [0, 0, 0],
+    kilogramos:         [0, 0, 0],
     precios:            [0, 0, 0],
     calibre:            "200",
     tintas:             1,
@@ -121,14 +121,16 @@ export default function FormularioCotizacion({
       refuerzo: "", solapa: "",
     },
     medidasFormateadas: "",
-    // 🔥 Sin suaje por defecto
     idsuaje:            null,
     suajeTipo:          null,
     observacion:        "",
+    pantones:           null,
+    pigmentos:          null,
+    modoCantidad:       "unidad",
   };
 
-  const [productoActual,      setProductoActual]      = useState<Producto>(estadoInicialProducto);
-  const [datosProductoNuevo,  setDatosProductoNuevo]  = useState<DatosProducto>({
+  const [productoActual,     setProductoActual]     = useState<Producto>(estadoInicialProducto);
+  const [datosProductoNuevo, setDatosProductoNuevo] = useState<DatosProducto>({
     tipoProducto: "", tipoProductoId: 0,
     material:     "", materialId: 0,
     calibre:      "", calibreId: 0,
@@ -141,27 +143,112 @@ export default function FormularioCotizacion({
     nombreCompleto:     "",
   });
 
-  // ====================================
-  // HOOK PARA CALCULAR PRECIOS CON DEBOUNCE
-  // ====================================
+  const calcularDesdeInput = (
+    texto: [string, string, string],
+    modo: "unidad" | "kilo",
+    porKilo: string | undefined
+  ): { bolsas: [number, number, number]; kgs: [number, number, number] } => {
+    const porKiloNum = porKilo ? Number(porKilo) : 0;
+    const bolsas = texto.map((v) => {
+      const n = v === "" ? 0 : Number(v);
+      if (n <= 0) return 0;
+      if (modo === "kilo" && porKiloNum > 0) return Math.round(n * porKiloNum);
+      return n;
+    }) as [number, number, number];
+
+    const kgs = texto.map((v) => {
+      const n = v === "" ? 0 : Number(v);
+      if (n <= 0) return 0;
+      if (modo === "kilo") return n;
+      if (porKiloNum > 0) return Number((n / porKiloNum).toFixed(4));
+      return 0;
+    }) as [number, number, number];
+
+    return { bolsas, kgs };
+  };
+
+  const { bolsas: cantidadesEnBolsas } = calcularDesdeInput(
+    cantidadesTexto,
+    modoCantidad,
+    productoActual.porKilo
+  );
+
   const { resultados, loading: calculandoPrecios, error: errorCalculo } = usePreciosBatch({
-    cantidades: productoActual.cantidades,
+    cantidades: cantidadesEnBolsas,
     porKilo:    productoActual.porKilo,
     tintasId:   productoActual.tintasId,
     carasId:    productoActual.carasId,
-    enabled:    productoActual.cantidades.some(c => c > 0) && !!productoActual.porKilo,
+    enabled:    cantidadesEnBolsas.some(c => c > 0) && !!productoActual.porKilo,
   });
 
-  // ====================================
-  // CARGAR CATÁLOGOS AL MONTAR
-  // ====================================
+  useEffect(() => { cargarCatalogos(); }, []);
+
   useEffect(() => {
-    cargarCatalogos();
-  }, []);
+    if (modoColor === "pantones") {
+      setInputsPantones((prev) => {
+        return Array(productoActual.tintas).fill("").map((_, i) => prev[i] || "");
+      });
+    }
+  }, [productoActual.tintas, modoColor]);
+
+  useEffect(() => {
+    if (resultados.length === 0) return;
+
+    // Usar setters funcionales para leer estado fresco y evitar stale closures
+    setProductoActual(prev => {
+      const nuevosPrecios = [...prev.precios] as [number, number, number];
+      resultados.forEach((r, i) => {
+        if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined) {
+          nuevosPrecios[i] = r.precio_unitario;
+        }
+      });
+      return { ...prev, precios: nuevosPrecios };
+    });
+
+    setPreciosTexto(prev => {
+      const nuevosTextos = [...prev] as [string, string, string];
+      resultados.forEach((r, i) => {
+        if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined) {
+          const precioMostrar =
+            modoCantidad === "kilo" && productoActual.porKilo && Number(productoActual.porKilo) > 0
+              ? r.precio_unitario * Number(productoActual.porKilo)
+              : r.precio_unitario;
+          nuevosTextos[i] = precioMostrar.toFixed(4);
+        }
+      });
+      return nuevosTextos;
+    });
+  }, [resultados]);
+
+  useEffect(() => {
+    if (mostrarModalClientes && clientesCargados.length === 0) cargarClientes();
+  }, [mostrarModalClientes]);
+
+  useEffect(() => {
+    if (!mostrarModalClientes) return;
+    const timer = setTimeout(() => { cargarClientes(busquedaCliente); }, 500);
+    return () => clearTimeout(timer);
+  }, [busquedaCliente]);
+
+  useEffect(() => {
+    if (mostrarModalProductos && productosCargados.length === 0) cargarProductos();
+  }, [mostrarModalProductos]);
+
+  useEffect(() => {
+    if (!mostrarModalProductos) return;
+    const timer = setTimeout(() => { cargarProductos(busquedaProducto); }, 500);
+    return () => clearTimeout(timer);
+  }, [busquedaProducto]);
+
+  useEffect(() => {
+    setCantidadesTexto(["", "", ""]);
+    setProductoActual(prev => ({ ...prev, cantidades: [0, 0, 0], kilogramos: [0, 0, 0], precios: [0, 0, 0] }));
+    setPreciosEditadosManualmente([false, false, false]);
+    setPreciosTexto(["", "", ""]);
+  }, [modoCantidad]);
 
   const cargarCatalogos = async () => {
     try {
-      // 🔥 Carga en paralelo: catálogos de producción + suajes
       const [catalogosData, suajesData] = await Promise.all([
         getCatalogosProduccion(),
         getSuajes(),
@@ -174,55 +261,6 @@ export default function FormularioCotizacion({
     }
   };
 
-  // ====================================
-  // ACTUALIZAR PRECIOS — solo los que NO fueron editados manualmente
-  // ====================================
-  useEffect(() => {
-    if (resultados.length > 0) {
-      const nuevosPrecios = [...productoActual.precios] as [number, number, number];
-      const nuevosTextos  = [...preciosTexto]           as [string, string, string];
-
-      resultados.forEach((r, i) => {
-        if (!preciosEditadosManualmente[i] && r?.precio_unitario !== undefined) {
-          nuevosPrecios[i] = r.precio_unitario;
-          nuevosTextos[i]  = r.precio_unitario.toFixed(4);
-        }
-      });
-
-      setProductoActual(prev => ({ ...prev, precios: nuevosPrecios }));
-      setPreciosTexto(nuevosTextos);
-    }
-  }, [resultados]);
-
-  // ====================================
-  // EFECTOS PARA BÚSQUEDA DE CLIENTES
-  // ====================================
-  useEffect(() => {
-    if (mostrarModalClientes && clientesCargados.length === 0) cargarClientes();
-  }, [mostrarModalClientes]);
-
-  useEffect(() => {
-    if (!mostrarModalClientes) return;
-    const timer = setTimeout(() => { cargarClientes(busquedaCliente); }, 500);
-    return () => clearTimeout(timer);
-  }, [busquedaCliente]);
-
-  // ====================================
-  // EFECTOS PARA BÚSQUEDA DE PRODUCTOS
-  // ====================================
-  useEffect(() => {
-    if (mostrarModalProductos && productosCargados.length === 0) cargarProductos();
-  }, [mostrarModalProductos]);
-
-  useEffect(() => {
-    if (!mostrarModalProductos) return;
-    const timer = setTimeout(() => { cargarProductos(busquedaProducto); }, 500);
-    return () => clearTimeout(timer);
-  }, [busquedaProducto]);
-
-  // ====================================
-  // FUNCIONES DE API - CLIENTES
-  // ====================================
   const cargarClientes = async (query?: string) => {
     setLoadingClientes(true);
     setErrorClientes(null);
@@ -272,9 +310,6 @@ export default function FormularioCotizacion({
     setBusquedaCliente("");
   };
 
-  // ====================================
-  // FUNCIONES DE API - PRODUCTOS
-  // ====================================
   const cargarProductos = async (query?: string) => {
     setLoadingProductos(true);
     setErrorProductos(null);
@@ -302,6 +337,7 @@ export default function FormularioCotizacion({
       productoId:         producto.id,
       nombre:             `${producto.tipo_producto} ${producto.medida} ${producto.material.toLowerCase()}`,
       cantidades:         [0, 0, 0],
+      kilogramos:         [0, 0, 0],
       precios:            [0, 0, 0],
       calibre:            producto.calibre.toString(),
       tintas:             tintas[0]?.cantidad || 1,
@@ -312,24 +348,25 @@ export default function FormularioCotizacion({
       medidas:            medidasMapeadas,
       medidasFormateadas: producto.medida,
       porKilo:            producto.por_kilo,
-      // 🔥 Al seleccionar producto existente, el suaje inicia en null
       idsuaje:            null,
       suajeTipo:          null,
+      pantones:           null,
+      pigmentos:          null,
+      modoCantidad:       modoCantidad,
     });
+    setCantidadesTexto(["", "", ""]);
     setPreciosEditadosManualmente([false, false, false]);
     setPreciosTexto(["", "", ""]);
+    setModoColor(null);
+    setInputsPantones([]);
     setMostrarModalProductos(false);
     setBusquedaProducto("");
   };
 
-  // ====================================
-  // CREAR PRODUCTO NUEVO Y AGREGAR
-  // ====================================
   const crearYAgregarProductoNuevo = async (): Promise<Producto | null> => {
     setGuardandoProducto(true);
     try {
       const porKiloCalculado = calcularPorKilo(datosProductoNuevo, catalogos.materiales);
-
       const productoData: ProductoPlasticoCreate = {
         tipo_producto_plastico_id: datosProductoNuevo.tipoProductoId,
         material_plastico_id:      datosProductoNuevo.materialId,
@@ -343,18 +380,14 @@ export default function FormularioCotizacion({
         medida:       datosProductoNuevo.medidasFormateadas,
         por_kilo:     porKiloCalculado ?? 0,
       };
-
       const response = await crearOObtenerProducto(productoData);
-
       const productoConId: Producto = {
         ...productoActual,
         productoId: response.producto.id,
         porKilo:    response.producto.por_kilo,
       };
-
       setProductoActual(productoConId);
       return productoConId;
-
     } catch (error: any) {
       console.error("Error al crear/obtener producto:", error);
       alert(error.response?.data?.error || "Error al guardar producto");
@@ -364,9 +397,6 @@ export default function FormularioCotizacion({
     }
   };
 
-  // ====================================
-  // FUNCIONES DE UI
-  // ====================================
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setDatos({ ...datos, [name]: value });
@@ -374,10 +404,10 @@ export default function FormularioCotizacion({
 
   const handleProductoNuevoChange = (nuevosDatos: DatosProducto) => {
     setDatosProductoNuevo(nuevosDatos);
-
     const porKiloCalculado = calcularPorKilo(nuevosDatos, catalogos.materiales);
-    const porKiloStr       = porKiloCalculado !== null ? porKiloCalculado.toString() : undefined;
-
+    const porKiloStr = porKiloCalculado !== null
+      ? parseFloat(porKiloCalculado.toFixed(3)).toString()
+      : undefined;
     setProductoActual((prev) => ({
       ...prev,
       nombre:             nuevosDatos.nombreCompleto,
@@ -390,13 +420,14 @@ export default function FormularioCotizacion({
   };
 
   const handleCantidadChange = (index: number, value: string) => {
-    const nuevasCantidades = [...productoActual.cantidades] as [number, number, number];
-    nuevasCantidades[index] = value === "" ? 0 : Number(value);
+    const nuevasTexto = [...cantidadesTexto] as [string, string, string];
+    nuevasTexto[index] = value;
+    setCantidadesTexto(nuevasTexto);
 
+    const { bolsas, kgs } = calcularDesdeInput(nuevasTexto, modoCantidad, productoActual.porKilo);
     const nuevosFlags = [...preciosEditadosManualmente] as [boolean, boolean, boolean];
     nuevosFlags[index] = false;
-
-    setProductoActual({ ...productoActual, cantidades: nuevasCantidades });
+    setProductoActual(prev => ({ ...prev, cantidades: bolsas, kilogramos: kgs }));
     setPreciosEditadosManualmente(nuevosFlags);
   };
 
@@ -411,8 +442,12 @@ export default function FormularioCotizacion({
 
     const nuevosPrecios = [...productoActual.precios] as [number, number, number];
     const parsed = parseFloat(value);
-    nuevosPrecios[index] = isNaN(parsed) ? 0 : parsed;
-    setProductoActual({ ...productoActual, precios: nuevosPrecios });
+    if (modoCantidad === "kilo" && productoActual.porKilo && Number(productoActual.porKilo) > 0) {
+      nuevosPrecios[index] = isNaN(parsed) ? 0 : parsed / Number(productoActual.porKilo);
+    } else {
+      nuevosPrecios[index] = isNaN(parsed) ? 0 : parsed;
+    }
+    setProductoActual(prev => ({ ...prev, precios: nuevosPrecios }));
   };
 
   const handlePrecioBlur = (index: number) => {
@@ -433,49 +468,98 @@ export default function FormularioCotizacion({
     const nuevosFlags = [...preciosEditadosManualmente] as [boolean, boolean, boolean];
     nuevosFlags[index] = false;
     setPreciosEditadosManualmente(nuevosFlags);
-
     const nuevosTextos = [...preciosTexto] as [string, string, string];
     nuevosTextos[index] = "";
     setPreciosTexto(nuevosTextos);
   };
 
   const handleObservacionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setProductoActual({ ...productoActual, observacion: e.target.value });
+    setProductoActual(prev => ({ ...prev, observacion: e.target.value }));
   };
 
-  // ====================================
-  // AGREGAR PRODUCTO A LA LISTA
-  // ====================================
+  const sanitizarTexto = (texto: string): string =>
+    texto.replace(/[,|]/g, "").replace(/\s+/g, " ").trim();
+
+  const handleCambiarModoColor = (modo: "pantones" | "pigmentos") => {
+    if (modoColor === modo) {
+      setModoColor(null);
+    } else {
+      setModoColor(modo);
+      if (modo === "pantones") {
+        if (productoActual.pantones) {
+          const arr = productoActual.pantones.split(", ").map(s => s.trim());
+          setInputsPantones(Array(productoActual.tintas).fill("").map((_, i) => arr[i] || ""));
+        } else {
+          setInputsPantones(Array(productoActual.tintas).fill(""));
+        }
+      }
+    }
+  };
+
+  const handlePantoneChange = (index: number, value: string) => {
+    const sanitizado = sanitizarTexto(value);
+    const nuevos = [...inputsPantones];
+    nuevos[index] = sanitizado;
+    setInputsPantones(nuevos);
+    const pantonesStr = nuevos.join(", ");
+    setProductoActual(prev => ({
+      ...prev,
+      pantones: pantonesStr.replace(/^[\s,]+|[\s,]+$/g, "") || null,
+    }));
+  };
+
+  const handlePigmentoChange = (value: string) => {
+    setProductoActual(prev => ({ ...prev, pigmentos: sanitizarTexto(value) || null }));
+  };
+
   const handleAgregarProducto = async () => {
-    const tieneValoresValidos = productoActual.cantidades.some(
+    const { bolsas: cantsBolsas, kgs: catsKgs } = calcularDesdeInput(
+      cantidadesTexto,
+      modoCantidad,
+      productoActual.porKilo
+    );
+
+    const tieneValoresValidos = cantsBolsas.some(
       (cant, i) => cant > 0 && productoActual.precios[i] > 0
     );
     if (!productoActual.nombre || !tieneValoresValidos) {
       alert("Por favor completa los datos del producto");
       return;
     }
+    if (hayErrorKg) {
+      alert("Una o más cantidades no cumplen el mínimo de 30 kg.");
+      return;
+    }
 
-    let productoParaAgregar: Producto = productoActual;
+    let productoParaAgregar: Producto = {
+      ...productoActual,
+      cantidades:   cantsBolsas,
+      kilogramos:   catsKgs,
+      modoCantidad: modoCantidad,
+    };
 
     if (modoProducto === "nuevo" && !productoActual.productoId) {
       const productoCreado = await crearYAgregarProductoNuevo();
       if (!productoCreado) return;
-      productoParaAgregar = productoCreado;
+      productoParaAgregar = {
+        ...productoCreado,
+        cantidades:   cantsBolsas,
+        kilogramos:   catsKgs,
+        modoCantidad: modoCantidad,
+      };
     }
 
-    setDatos((prev) => ({
-      ...prev,
-      productos: [...prev.productos, productoParaAgregar],
-    }));
-
+    setDatos(prev => ({ ...prev, productos: [...prev.productos, productoParaAgregar] }));
     resetearFormularioProducto();
   };
 
   const resetearFormularioProducto = () => {
     setModoProducto("registrado");
+    setProductoNuevoListo(false);
     setProductoActual({
       nombre:     "",
       cantidades: [0, 0, 0],
+      kilogramos: [0, 0, 0],
       precios:    [0, 0, 0],
       calibre:    "200",
       tintas:     tintas[0]?.cantidad || 1,
@@ -489,10 +573,12 @@ export default function FormularioCotizacion({
         refuerzo: "", solapa: "",
       },
       medidasFormateadas: "",
-      // 🔥 Reset del suaje
-      idsuaje:            null,
-      suajeTipo:          null,
-      observacion:        "",
+      idsuaje:      null,
+      suajeTipo:    null,
+      observacion:  "",
+      pantones:     null,
+      pigmentos:    null,
+      modoCantidad: "unidad",
     });
     setDatosProductoNuevo({
       tipoProducto: "", tipoProductoId: 0,
@@ -508,11 +594,15 @@ export default function FormularioCotizacion({
     });
     setPreciosEditadosManualmente([false, false, false]);
     setPreciosTexto(["", "", ""]);
+    setCantidadesTexto(["", "", ""]);
+    setModoCantidad("unidad");
     setMostrarDropdownSuaje(false);
+    setModoColor(null);
+    setInputsPantones([]);
   };
 
   const handleEliminarProducto = (index: number) => {
-    setDatos({ ...datos, productos: datos.productos.filter((_, i) => i !== index) });
+    setDatos(prev => ({ ...prev, productos: prev.productos.filter((_, i) => i !== index) }));
   };
 
   const handleSiguiente = async () => {
@@ -536,9 +626,111 @@ export default function FormularioCotizacion({
       total + prod.cantidades.reduce((sum, cant, i) => sum + cant * prod.precios[i], 0)
     , 0);
 
-  // ====================================
-  // RENDER
-  // ====================================
+  const hayProductoSeleccionado =
+    (modoProducto === "registrado" && productoActual.nombre) ||
+    (modoProducto === "nuevo"      && productoNuevoListo);
+
+  const labelCantidad = modoCantidad === "kilo" ? "kg" : "bolsas";
+
+  const getEquivalente = (index: number): string | null => {
+    const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
+    const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
+    if (!pk || n <= 0) return null;
+    if (modoCantidad === "unidad") return `≈ ${(n / pk).toFixed(2)} kg`;
+    return `≈ ${Math.round(n * pk).toLocaleString()} bolsas`;
+  };
+
+  const MIN_KG = 30;
+  const getErrorKg = (index: number): string | null => {
+    const n = cantidadesTexto[index] === "" ? 0 : Number(cantidadesTexto[index]);
+    if (n <= 0) return null;
+    const pk = productoActual.porKilo ? Number(productoActual.porKilo) : 0;
+    let kgs = 0;
+    if (modoCantidad === "kilo") {
+      kgs = n;
+    } else if (pk > 0) {
+      kgs = n / pk;
+    } else {
+      return null;
+    }
+    // Redondear a 4 decimales para evitar falsos positivos por floating point (ej: 29.9999... en vez de 30)
+    const kgsRedondeados = Math.round(kgs * 10000) / 10000;
+    if (kgsRedondeados < MIN_KG) {
+      const faltanKg = (MIN_KG - kgsRedondeados).toFixed(2);
+      if (modoCantidad === "kilo") {
+        return `Mínimo ${MIN_KG} kg (faltan ${faltanKg} kg)`;
+      } else {
+        const bolsasMin = Math.ceil(MIN_KG * pk);
+        return `Mínimo ${MIN_KG} kg ≈ ${bolsasMin.toLocaleString()} bolsas`;
+      }
+    }
+    return null;
+  };
+
+  const hayErrorKg = cantidadesTexto.some((v, i) => {
+    if (v === "" || Number(v) <= 0) return false;
+    return getErrorKg(i) !== null;
+  });
+
+  // Helpers para la figura inline (solo en producto nuevo)
+  const tieneLateral =
+    Number(datosProductoNuevo.medidas.fuelleLateral1) > 0 ||
+    Number(datosProductoNuevo.medidas.fuelleLateral2) > 0;
+  const tieneFondoORefuerzo =
+    Number(datosProductoNuevo.medidas.fuelleFondo) > 0 ||
+    Number(datosProductoNuevo.medidas.refuerzo) > 0;
+
+  const construirMedidasFormateadasLocal = (medidas: Record<MedidaKey, string>) => {
+    const verticales  = FORMATO_MEDIDAS.verticales.map((k)  => medidas[k]).filter((v) => v && Number(v) > 0);
+    const horizontales = FORMATO_MEDIDAS.horizontales.map((k) => medidas[k]).filter((v) => v && Number(v) > 0);
+    if (!verticales.length && !horizontales.length) return "";
+    if (!horizontales.length) return verticales.join("+");
+    if (!verticales.length)   return horizontales.join("+");
+    return `${verticales.join("+")}x${horizontales.join("+")}`;
+  };
+
+  const setMedidaInline = (key: MedidaKey, value: string) => {
+    const v = value.trim();
+    const prev = datosProductoNuevo.medidas as Record<MedidaKey, string>;
+    let nuevas = { ...prev, [key]: v };
+    if (key === "fuelleLateral1" || key === "fuelleLateral2") {
+      nuevas.fuelleLateral1 = v;
+      nuevas.fuelleLateral2 = v;
+      if (v !== "" && Number(v) > 0) { nuevas.refuerzo = "0"; nuevas.fuelleFondo = "0"; }
+    }
+    if (key === "refuerzo" || key === "fuelleFondo") {
+      if (v !== "" && Number(v) > 0) { nuevas.fuelleLateral1 = "0"; nuevas.fuelleLateral2 = "0"; }
+    }
+    const medidasFormateadas = construirMedidasFormateadasLocal(nuevas);
+    const datosActualizados = { ...datosProductoNuevo, medidas: nuevas, medidasFormateadas };
+
+    // Recalcular nombre completo con medidas actualizadas
+    if (datosProductoNuevo.tipoProducto && datosProductoNuevo.material && medidasFormateadas) {
+      datosActualizados.nombreCompleto = `${datosProductoNuevo.tipoProducto} ${medidasFormateadas} ${datosProductoNuevo.material.toLowerCase()}`;
+    }
+
+    setDatosProductoNuevo(datosActualizados);
+    const porKiloCalculado = calcularPorKilo(datosActualizados, catalogos.materiales);
+    const porKiloStr = porKiloCalculado !== null
+      ? parseFloat(porKiloCalculado.toFixed(3)).toString()
+      : undefined;
+    setProductoActual((prev) => ({
+      ...prev,
+      nombre:             datosActualizados.nombreCompleto,
+      medidas:            { ...nuevas },
+      medidasFormateadas,
+      porKilo:            porKiloStr,
+    }));
+  };
+
+  // ── Helper: detectar si el producto seleccionado es "Asa Flexible" ──
+  const getEsAsaFlexible = (): boolean => {
+    const tipo = modoProducto === "nuevo"
+      ? datosProductoNuevo.tipoProducto
+      : productoActual.nombre;
+    return (tipo || "").toLowerCase().includes("asa flexible");
+  };
+
   return (
     <div className="relative">
 
@@ -554,35 +746,30 @@ export default function FormularioCotizacion({
                 </button>
               </div>
               <div className="relative">
-                <input type="text" value={busquedaCliente} onChange={(e) => setBusquedaCliente(e.target.value)} placeholder="Buscar por nombre, empresa, teléfono o correo..." className="w-full px-4 py-3 pl-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 bg-white" autoFocus />
+                <input type="text" value={busquedaCliente} onChange={(e) => setBusquedaCliente(e.target.value)} placeholder="Buscar por nombre, empresa, teléfono o correo..." className="w-full px-4 py-3 pl-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white" autoFocus />
                 <svg className="w-5 h-5 text-gray-400 absolute left-3 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
             </div>
             <div className="overflow-y-auto max-h-96">
               {loadingClientes ? (
-                <div className="p-8 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div><p className="mt-4 text-gray-600">Cargando clientes...</p></div>
+                <div className="p-8 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div><p className="mt-4 text-gray-600">Cargando...</p></div>
               ) : errorClientes ? (
-                <div className="p-8 text-center"><p className="text-gray-700 font-medium">{errorClientes}</p><button onClick={() => cargarClientes(busquedaCliente)} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Reintentar</button></div>
+                <div className="p-8 text-center"><p className="text-gray-700">{errorClientes}</p><button onClick={() => cargarClientes(busquedaCliente)} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg">Reintentar</button></div>
               ) : clientesCargados.length > 0 ? (
                 <div className="divide-y divide-gray-200">
-                  {clientesCargados.map((cliente) => (
-                    <div key={cliente.idclientes} onClick={() => seleccionarCliente(cliente)} className="p-4 hover:bg-purple-50 cursor-pointer transition-colors">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">{cliente.atencion || "Sin nombre"}</h4>
-                          {cliente.empresa && <p className="text-sm text-gray-600 mt-1">{cliente.empresa}</p>}
-                          <div className="flex gap-4 mt-2 text-sm text-gray-500">
-                            {cliente.telefono && <span>{cliente.telefono}</span>}
-                            {cliente.correo   && <span>{cliente.correo}</span>}
-                          </div>
-                        </div>
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  {clientesCargados.map((c) => (
+                    <div key={c.idclientes} onClick={() => seleccionarCliente(c)} className="p-4 hover:bg-purple-50 cursor-pointer transition-colors">
+                      <h4 className="font-semibold text-gray-900">{c.atencion || "Sin nombre"}</h4>
+                      {c.empresa && <p className="text-sm text-gray-600 mt-1">{c.empresa}</p>}
+                      <div className="flex gap-4 mt-2 text-sm text-gray-500">
+                        {c.telefono && <span>{c.telefono}</span>}
+                        {c.correo   && <span>{c.correo}</span>}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-8 text-center text-gray-500"><p className="text-lg font-medium">No se encontraron clientes</p></div>
+                <div className="p-8 text-center text-gray-500">No se encontraron clientes</div>
               )}
             </div>
           </div>
@@ -601,35 +788,30 @@ export default function FormularioCotizacion({
                 </button>
               </div>
               <div className="relative">
-                <input type="text" value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.target.value)} placeholder="Buscar por medidas, material, calibre o tipo..." className="w-full px-4 py-3 pl-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white" autoFocus />
+                <input type="text" value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.target.value)} placeholder="Buscar por medidas, material, calibre o tipo..." className="w-full px-4 py-3 pl-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" autoFocus />
                 <svg className="w-5 h-5 text-gray-400 absolute left-3 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
             </div>
             <div className="overflow-y-auto max-h-96">
               {loadingProductos ? (
-                <div className="p-8 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div><p className="mt-4 text-gray-600">Cargando productos...</p></div>
+                <div className="p-8 text-center"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div><p className="mt-4 text-gray-600">Cargando...</p></div>
               ) : errorProductos ? (
-                <div className="p-8 text-center"><p className="text-gray-700 font-medium">{errorProductos}</p><button onClick={() => cargarProductos(busquedaProducto)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Reintentar</button></div>
+                <div className="p-8 text-center"><p className="text-gray-700">{errorProductos}</p><button onClick={() => cargarProductos(busquedaProducto)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Reintentar</button></div>
               ) : productosCargados.length > 0 ? (
                 <div className="divide-y divide-gray-200">
-                  {productosCargados.map((producto) => (
-                    <div key={producto.id} onClick={() => seleccionarProducto(producto)} className="p-4 hover:bg-blue-50 cursor-pointer transition-colors">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">{producto.tipo_producto} {producto.medida} {producto.material.toLowerCase()}</h4>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-600">
-                            <span>Calibre: {producto.calibre}</span>
-                            <span>Medidas: {producto.medida}</span>
-                            <span>Por kilo: {producto.por_kilo}</span>
-                          </div>
-                        </div>
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  {productosCargados.map((p) => (
+                    <div key={p.id} onClick={() => seleccionarProducto(p)} className="p-4 hover:bg-blue-50 cursor-pointer transition-colors">
+                      <h4 className="font-semibold text-gray-900">{p.tipo_producto} {p.medida} {p.material.toLowerCase()}</h4>
+                      <div className="flex flex-wrap gap-x-4 mt-2 text-sm text-gray-600">
+                        <span>Calibre: {p.calibre}</span>
+                        <span>Medidas: {p.medida}</span>
+                        <span>Por kilo: {p.por_kilo}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-8 text-center text-gray-500"><p className="text-lg font-medium">No se encontraron productos</p></div>
+                <div className="p-8 text-center text-gray-500">No se encontraron productos</div>
               )}
             </div>
           </div>
@@ -643,9 +825,7 @@ export default function FormularioCotizacion({
             {paso === 1 ? "1" : "✓"}
           </div>
           <div className={`w-24 h-1 ${paso === 2 ? "bg-blue-600" : "bg-gray-300"}`}></div>
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${paso === 2 ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"}`}>
-            2
-          </div>
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${paso === 2 ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"}`}>2</div>
         </div>
       </div>
 
@@ -653,39 +833,35 @@ export default function FormularioCotizacion({
       <div className={paso === 1 ? "block" : "hidden"}>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Datos del Cliente</h3>
-          <button type="button" onClick={() => setMostrarModalClientes(true)} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+          <button type="button" onClick={() => setMostrarModalClientes(true)} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             Cliente Existente
           </button>
         </div>
-        {errorCrearCliente && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{errorCrearCliente}</p>
-          </div>
-        )}
+        {errorCrearCliente && <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">{errorCrearCliente}</p></div>}
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del Cliente</label>
-            <input type="text" name="cliente" value={datos.cliente} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400" placeholder="Juan Pérez" />
+            <input type="text" name="cliente" value={datos.cliente} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" placeholder="Juan Pérez" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
-              <input type="tel" name="telefono" value={datos.telefono} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400" placeholder="33-1234-5678" />
+              <input type="tel" name="telefono" value={datos.telefono} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" placeholder="33-1234-5678" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico</label>
-              <input type="email" name="correo" value={datos.correo} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400" placeholder="cliente@ejemplo.com" />
+              <input type="email" name="correo" value={datos.correo} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" placeholder="cliente@ejemplo.com" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Empresa (Opcional)</label>
-            <input type="text" name="empresa" value={datos.empresa} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400" placeholder="Nombre de la empresa" />
+            <input type="text" name="empresa" value={datos.empresa} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" placeholder="Nombre de la empresa" />
           </div>
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button type="button" onClick={onCancel} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50" disabled={creandoCliente}>Cancelar</button>
-          <button type="button" onClick={handleSiguiente} disabled={creandoCliente} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2">
+          <button type="button" onClick={handleSiguiente} disabled={creandoCliente} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2">
             {creandoCliente ? (<><div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Guardando...</>) : "Siguiente"}
           </button>
         </div>
@@ -702,12 +878,11 @@ export default function FormularioCotizacion({
 
         <div className="bg-gray-50 p-6 rounded-lg mb-4">
 
-          {/* Modo producto registrado */}
           {modoProducto === "registrado" && (
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Buscar Producto</label>
-                <button type="button" onClick={() => setMostrarModalProductos(true)} className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-2">
+                <button type="button" onClick={() => setMostrarModalProductos(true)} className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                   Click para buscar producto registrado
                 </button>
@@ -726,20 +901,107 @@ export default function FormularioCotizacion({
             </div>
           )}
 
-          {/* Modo producto nuevo */}
           {modoProducto === "nuevo" && (
-            <SelectorProducto catalogos={catalogos} onProductoChange={handleProductoNuevoChange} mostrarFigura={true} />
+            <div className="space-y-4">
+              {/* Selects sin figura */}
+              {!productoNuevoListo && (
+                <SelectorProducto
+                  catalogos={catalogos}
+                  onProductoChange={handleProductoNuevoChange}
+                  mostrarFigura={false}
+                />
+              )}
+
+              {/* Figura con inputs de medidas — debajo, ancho completo */}
+              {!productoNuevoListo && datosProductoNuevo.tipoProducto && CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto] && (
+                <div className="bg-white p-4 rounded-lg border border-gray-200">
+                  <div
+                    className="relative w-full flex items-center justify-center"
+                    style={{ minHeight: "460px", paddingLeft: "160px", paddingRight: "160px", paddingTop: "48px", paddingBottom: "48px" }}
+                  >
+                    <img
+                      src={CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].imagen}
+                      alt={datosProductoNuevo.tipoProducto}
+                      className="max-w-[220px] max-h-[340px] object-contain"
+                    />
+                    {CONFIG_PRODUCTOS[datosProductoNuevo.tipoProducto].medidas.map((m) => {
+                      const esLateral = m.key === "fuelleLateral1" || m.key === "fuelleLateral2";
+                      const esFondoORefuerzo = m.key === "fuelleFondo" || m.key === "refuerzo";
+                      const bloqueado =
+                        (esLateral && tieneFondoORefuerzo) || (esFondoORefuerzo && tieneLateral);
+                      return (
+                        <div
+                          key={m.key}
+                          className={`absolute flex items-center gap-1 ${
+                            m.position === "top"         ? "top-4 left-1/2 -translate-x-1/2 flex-col"             : ""
+                          } ${
+                            m.position === "left"        ? "left-6 top-1/2 -translate-y-1/2 flex-row"             : ""
+                          } ${
+                            m.position === "bottom"      ? "bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse"  : ""
+                          } ${
+                            m.position === "right"       ? "right-6 top-1/2 -translate-y-1/2 flex-row-reverse"    : ""
+                          } ${
+                            m.position === "right-top"   ? "right-6 top-16 flex-row-reverse"                      : ""
+                          } ${
+                            m.position === "left-bottom" ? "left-6 bottom-16 flex-row"                            : ""
+                          } ${
+                            m.position === "top-inside"  ? "top-16 right-6 flex-col"                              : ""
+                          }`}
+                        >
+                          <label className={`text-xs font-medium whitespace-nowrap ${bloqueado ? "text-gray-300" : "text-gray-700"}`}>
+                            {m.label}
+                            {esLateral && !bloqueado && (
+                              <span className="ml-1 text-blue-400 text-xs" title="Se sincroniza con el otro fuelle lateral">⇄</span>
+                            )}
+                          </label>
+                          <input
+                            type="number"
+                            value={(datosProductoNuevo.medidas as Record<MedidaKey, string>)[m.key]}
+                            onChange={(e) => !bloqueado && setMedidaInline(m.key, e.target.value)}
+                            disabled={bloqueado}
+                            className={`w-16 px-2 py-1 text-sm text-center border-2 rounded focus:outline-none ${
+                              bloqueado
+                                ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
+                                : "border-gray-300 focus:border-blue-500"
+                            }`}
+                            placeholder="0"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Resumen cuando el producto nuevo está confirmado */}
+              {productoNuevoListo && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">{productoActual.nombre || datosProductoNuevo.tipoProducto}</p>
+                    <div className="flex flex-wrap gap-x-4 mt-1 text-xs text-gray-600">
+                      <span>Material: {datosProductoNuevo.material}</span>
+                      <span>Calibre: {datosProductoNuevo.calibre}</span>
+                      <span>Medidas: {productoActual.medidasFormateadas || datosProductoNuevo.medidasFormateadas || "—"}</span>
+                      {productoActual.porKilo && <span>Por kilo: {productoActual.porKilo}</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setProductoNuevoListo(false)}
+                    className="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
+                  >
+                    ← Editar
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Sección de configuración adicional — visible cuando hay producto seleccionado */}
-          {((modoProducto === "registrado" && productoActual.nombre) ||
-            (modoProducto === "nuevo"      && datosProductoNuevo.nombreCompleto)) && (
+          {hayProductoSeleccionado && (
             <div className="mt-6 space-y-4 border-t pt-4">
 
-              {/* ── TINTAS, CARAS y SUAJE ── */}
+              {/* Tintas y Caras */}
               <div className="grid grid-cols-2 gap-4">
-
-                {/* Tintas */}
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Tintas</label>
                   <div className="flex gap-2">
@@ -750,16 +1012,19 @@ export default function FormularioCotizacion({
                   </div>
                   {mostrarDropdownTintas && (
                     <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
-                      {tintas.map((tinta) => (
-                        <li key={tinta.id} onClick={() => { setProductoActual({ ...productoActual, tintas: tinta.cantidad, tintasId: tinta.id }); setMostrarDropdownTintas(false); }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
-                          {tinta.cantidad} tinta{tinta.cantidad > 1 ? "s" : ""}
+                      {tintas.map((t) => (
+                        <li key={t.id} onClick={() => {
+                          setProductoActual(p => ({ ...p, tintas: t.cantidad, tintasId: t.id, pantones: null, pigmentos: null }));
+                          setInputsPantones(Array(t.cantidad).fill(""));
+                          setModoColor(null);
+                          setMostrarDropdownTintas(false);
+                        }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
+                          {t.cantidad} tinta{t.cantidad > 1 ? "s" : ""}
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
-
-                {/* Caras */}
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Caras</label>
                   <div className="flex gap-2">
@@ -770,9 +1035,9 @@ export default function FormularioCotizacion({
                   </div>
                   {mostrarDropdownCaras && (
                     <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20">
-                      {caras.map((cara) => (
-                        <li key={cara.id} onClick={() => { setProductoActual({ ...productoActual, caras: cara.cantidad, carasId: cara.id }); setMostrarDropdownCaras(false); }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
-                          {cara.cantidad} cara{cara.cantidad > 1 ? "s" : ""}
+                      {caras.map((c) => (
+                        <li key={c.id} onClick={() => { setProductoActual(p => ({ ...p, caras: c.cantidad, carasId: c.id })); setMostrarDropdownCaras(false); }} className="px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900">
+                          {c.cantidad} cara{c.cantidad > 1 ? "s" : ""}
                         </li>
                       ))}
                     </ul>
@@ -780,100 +1045,177 @@ export default function FormularioCotizacion({
                 </div>
               </div>
 
-              {/* 🔥 SUAJE / ASA — dropdown con los registros de asa_suaje */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Suaje / Asa
-                  <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={productoActual.suajeTipo || "Sin suaje"}
-                    readOnly
-                    className={`flex-1 px-4 py-2 border rounded-lg text-gray-900 bg-white cursor-pointer ${
-                      productoActual.idsuaje ? "border-blue-400 bg-blue-50" : "border-gray-300"
-                    }`}
-                    onClick={() => setMostrarDropdownSuaje(!mostrarDropdownSuaje)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setMostrarDropdownSuaje(!mostrarDropdownSuaje)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    <svg className={`w-5 h-5 transition-transform ${mostrarDropdownSuaje ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+              {/* Pantones / Pigmentos */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">Color / Tintas <span className="ml-2 text-xs text-gray-400 font-normal">(opcional)</span></label>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => handleCambiarModoColor("pantones")} className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all ${modoColor === "pantones" ? "border-purple-500 bg-purple-50 text-purple-700" : "border-gray-300 bg-white text-gray-600 hover:border-purple-300"}`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+                    Pantones
                   </button>
-                  {/* Botón para limpiar el suaje seleccionado */}
-                  {productoActual.idsuaje && (
-                    <button
-                      type="button"
-                      onClick={() => setProductoActual(prev => ({ ...prev, idsuaje: null, suajeTipo: null }))}
-                      className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 transition-colors text-sm font-bold"
-                      title="Quitar suaje"
-                    >
-                      ✕
-                    </button>
-                  )}
+                  {(() => {
+                    const esBopp = productoActual.material?.toUpperCase().includes("BOPP") || productoActual.material?.toUpperCase().includes("CELOFAN") || productoActual.material?.toUpperCase().includes("CELOFÁN");
+                    return (
+                      <div className="relative group">
+                        <button type="button" disabled={esBopp} onClick={() => !esBopp && handleCambiarModoColor("pigmentos")} className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all ${esBopp ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed" : modoColor === "pigmentos" ? "border-orange-500 bg-orange-50 text-orange-700" : "border-gray-300 bg-white text-gray-600 hover:border-orange-300"}`}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                          Pigmentos
+                        </button>
+                        {esBopp && <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-30">Celofán/BOPP no lleva pigmentos</div>}
+                      </div>
+                    );
+                  })()}
                 </div>
-
-                {mostrarDropdownSuaje && (
-                  <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
-                    {/* Opción para quitar suaje */}
-                    <li
-                      onClick={() => {
-                        setProductoActual(prev => ({ ...prev, idsuaje: null, suajeTipo: null }));
-                        setMostrarDropdownSuaje(false);
-                      }}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm"
-                    >
-                      Sin suaje
-                    </li>
-                    {suajes.length === 0 ? (
-                      <li className="px-4 py-3 text-gray-400 text-sm text-center">
-                        No hay suajes registrados
-                      </li>
-                    ) : (
-                      suajes.map((s) => (
-                        <li
-                          key={s.idsuaje}
-                          onClick={() => {
-                            setProductoActual(prev => ({
-                              ...prev,
-                              // 🔥 Guardamos el id (FK) y el texto (para UI y PDF)
-                              idsuaje:   s.idsuaje,
-                              suajeTipo: s.tipo,
-                            }));
-                            setMostrarDropdownSuaje(false);
-                          }}
-                          className={`px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900 ${
-                            productoActual.idsuaje === s.idsuaje
-                              ? "bg-blue-50 font-semibold text-blue-700"
-                              : ""
-                          }`}
-                        >
-                          {s.tipo}
-                        </li>
-                      ))
-                    )}
-                  </ul>
+                {modoColor === "pantones" && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                    <p className="text-xs text-purple-600 font-medium">Ingresa el nombre o código de cada pantón ({productoActual.tintas} tinta{productoActual.tintas > 1 ? "s" : ""})</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {inputsPantones.map((valor, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-200 text-purple-800 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                          <input type="text" value={valor} onChange={(e) => handlePantoneChange(i, e.target.value)} placeholder={`Tinta ${i + 1}`} className="flex-1 px-3 py-2 border border-purple-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-purple-400" />
+                        </div>
+                      ))}
+                    </div>
+                    {productoActual.pantones && <p className="text-xs text-purple-500">Guardado: <span className="font-medium">{productoActual.pantones}</span></p>}
+                  </div>
                 )}
+                {modoColor === "pigmentos" && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-2">
+                    <p className="text-xs text-orange-600 font-medium">Especifica el pigmento que llevará este producto</p>
+                    <input type="text" value={productoActual.pigmentos || ""} onChange={(e) => handlePigmentoChange(e.target.value)} placeholder="Ej: Rojo intenso" className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-orange-400" />
+                    {productoActual.pigmentos && <p className="text-xs text-orange-500">Guardado: <span className="font-medium">{productoActual.pigmentos}</span></p>}
+                  </div>
+                )}
+              </div>
 
-                {/* Indicador visual del suaje seleccionado */}
-                {productoActual.idsuaje && (
-                  <p className="mt-1 text-xs text-blue-600 font-medium">
-                    ✓ Suaje seleccionado: <strong>{productoActual.suajeTipo}</strong>
-                  </p>
+              {/* ── Suaje / Asa — solo habilitado para "Asa Flexible" ── */}
+              {(() => {
+                const esAsaFlexible = getEsAsaFlexible();
+                return (
+                  <div className="relative">
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className={`block text-sm font-medium ${esAsaFlexible ? "text-gray-700" : "text-gray-300"}`}>
+                        Suaje / Asa{" "}
+                        <span className="ml-2 text-xs font-normal">(opcional)</span>
+                      </label>
+                      {!esAsaFlexible && (
+                        <span className="text-xs text-gray-400 italic">
+                          No aplica para este tipo de producto
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={productoActual.suajeTipo || "Sin suaje"}
+                        readOnly
+                        disabled={!esAsaFlexible}
+                        className={`flex-1 px-4 py-2 border rounded-lg ${
+                          !esAsaFlexible
+                            ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
+                            : productoActual.idsuaje
+                              ? "border-blue-400 bg-blue-50 text-gray-900 cursor-pointer"
+                              : "border-gray-300 text-gray-900 bg-white cursor-pointer"
+                        }`}
+                        onClick={() => esAsaFlexible && setMostrarDropdownSuaje(!mostrarDropdownSuaje)}
+                      />
+                      <button
+                        type="button"
+                        disabled={!esAsaFlexible}
+                        onClick={() => esAsaFlexible && setMostrarDropdownSuaje(!mostrarDropdownSuaje)}
+                        className={`px-4 py-2 rounded-lg ${
+                          esAsaFlexible
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            : "bg-gray-200 text-gray-300 cursor-not-allowed"
+                        }`}
+                      >
+                        <svg className={`w-5 h-5 transition-transform ${mostrarDropdownSuaje ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {productoActual.idsuaje && esAsaFlexible && (
+                        <button
+                          type="button"
+                          onClick={() => setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null }))}
+                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 text-sm font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {mostrarDropdownSuaje && esAsaFlexible && (
+                      <ul className="absolute w-full bg-white border border-gray-300 mt-1 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                        <li
+                          onClick={() => { setProductoActual(p => ({ ...p, idsuaje: null, suajeTipo: null })); setMostrarDropdownSuaje(false); }}
+                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-400 italic border-b border-gray-200 text-sm"
+                        >
+                          Sin suaje
+                        </li>
+                        {suajes.map((s) => (
+                          <li
+                            key={s.idsuaje}
+                            onClick={() => { setProductoActual(p => ({ ...p, idsuaje: s.idsuaje, suajeTipo: s.tipo })); setMostrarDropdownSuaje(false); }}
+                            className={`px-4 py-2 hover:bg-blue-100 cursor-pointer text-gray-900 ${productoActual.idsuaje === s.idsuaje ? "bg-blue-50 font-semibold text-blue-700" : ""}`}
+                          >
+                            {s.tipo}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {productoActual.idsuaje && esAsaFlexible && (
+                      <p className="mt-1 text-xs text-blue-600 font-medium">✓ {productoActual.suajeTipo}</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Modo cantidad */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Modo de cotización</label>
+                <div className="flex gap-2 bg-gray-100 p-1 rounded-lg w-fit">
+                  <button type="button" onClick={() => setModoCantidad("unidad")} className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${modoCantidad === "unidad" ? "bg-white text-blue-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                    Por bolsas
+                  </button>
+                  <button type="button" onClick={() => setModoCantidad("kilo")} disabled={!productoActual.porKilo || Number(productoActual.porKilo) <= 0} className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${!productoActual.porKilo || Number(productoActual.porKilo) <= 0 ? "text-gray-300 cursor-not-allowed" : modoCantidad === "kilo" ? "bg-white text-emerald-600 shadow" : "text-gray-600 hover:text-gray-900"}`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" /></svg>
+                    Por kilos
+                  </button>
+                </div>
+                {modoCantidad === "kilo" && productoActual.porKilo && (
+                  <p className="mt-1 text-xs text-emerald-600 font-medium">✓ Factor: {productoActual.porKilo} bolsas/kg</p>
                 )}
               </div>
 
               {/* Cantidades */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Cantidades</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cantidades <span className="text-xs text-gray-400 font-normal">(en {labelCantidad})</span>
+                </label>
                 <div className="grid grid-cols-3 gap-3">
-                  {productoActual.cantidades.map((cantidad, index) => (
-                    <input key={index} type="number" min="0" value={cantidad === 0 ? "" : cantidad} onChange={(e) => handleCantidadChange(index, e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" placeholder={`Cantidad ${index + 1}`} />
+                  {cantidadesTexto.map((valor, index) => (
+                    <div key={index} className="space-y-1">
+                      <input
+                        type="number" min="0"
+                        value={valor}
+                        onChange={(e) => handleCantidadChange(index, e.target.value)}
+                        className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${
+                          getErrorKg(index)
+                            ? "border-red-400 focus:ring-red-400"
+                            : modoCantidad === "kilo"
+                              ? "border-emerald-300 focus:ring-emerald-400"
+                              : "border-gray-300 focus:ring-blue-500"
+                        }`}
+                        placeholder={modoCantidad === "kilo" ? `Kilos ${index + 1}` : `Cantidad ${index + 1}`}
+                      />
+                      {getEquivalente(index) && !getErrorKg(index) && (
+                        <p className="text-xs text-gray-400">{getEquivalente(index)}</p>
+                      )}
+                      {getErrorKg(index) && (
+                        <p className="text-xs text-red-500 font-medium">⚠ {getErrorKg(index)}</p>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -882,63 +1224,45 @@ export default function FormularioCotizacion({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Precios unitarios
-                    <span className="ml-2 text-xs text-gray-400 font-normal">(automáticos o editables)</span>
+                    Precios <span className="text-xs text-gray-400 font-normal">({modoCantidad === "kilo" ? "por kg" : "por bolsa"})</span>
                   </label>
                   {preciosEditadosManualmente.some(Boolean) && (
-                    <button type="button" onClick={() => { setPreciosEditadosManualmente([false, false, false]); setPreciosTexto(["", "", ""]); }} className="text-xs text-blue-600 hover:text-blue-800 underline">
-                      ↺ Restaurar todos al automático
-                    </button>
+                    <button type="button" onClick={() => { setPreciosEditadosManualmente([false, false, false]); setPreciosTexto(["", "", ""]); }} className="text-xs text-blue-600 hover:text-blue-800 underline">↺ Restaurar todos</button>
                   )}
                 </div>
-
-                {errorCalculo && (
-                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-700 text-sm">⚠️ {errorCalculo}</p>
-                  </div>
-                )}
-
+                {errorCalculo && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-red-700 text-sm">⚠️ {errorCalculo}</p></div>}
                 <div className="grid grid-cols-3 gap-3">
                   {productoActual.precios.map((_, index) => (
                     <div key={index} className="space-y-1">
                       <div className="relative">
                         <input
-                          type="number"
-                          step="0.0001"
-                          min="0"
+                          type="number" step="0.0001" min="0"
                           value={preciosTexto[index]}
                           onChange={(e) => handlePrecioChange(index, e.target.value)}
                           onBlur={() => handlePrecioBlur(index)}
-                          className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white ${
-                            preciosEditadosManualmente[index]
-                              ? "border-orange-400 ring-1 ring-orange-300 focus:ring-orange-400"
-                              : "border-gray-300 focus:ring-blue-500"
-                          } focus:outline-none focus:ring-2`}
+                          className={`w-full px-4 py-2 border rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 ${preciosEditadosManualmente[index] ? "border-orange-400 ring-1 ring-orange-300" : "border-gray-300 focus:ring-blue-500"}`}
                           placeholder={calculandoPrecios && !preciosEditadosManualmente[index] ? "Calculando..." : "0.0000"}
                         />
-                        {calculandoPrecios && !preciosEditadosManualmente[index] && productoActual.cantidades[index] > 0 && (
-                          <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-                          </div>
+                        {calculandoPrecios && !preciosEditadosManualmente[index] && cantidadesEnBolsas[index] > 0 && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div></div>
                         )}
                         {preciosEditadosManualmente[index] && (
-                          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500 select-none" title="Editado manualmente">✏️</div>
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-orange-500" title="Editado manualmente">✏️</div>
                         )}
                       </div>
-                      {productoActual.cantidades[index] > 0 && productoActual.porKilo && (
-                        <div className="text-xs text-gray-500">
-                          {(productoActual.cantidades[index] / Number(productoActual.porKilo)).toFixed(2)} kg
-                        </div>
+                      {productoActual.precios[index] > 0 && productoActual.porKilo && Number(productoActual.porKilo) > 0 && (
+                        <p className="text-xs text-gray-400">
+                          {modoCantidad === "kilo"
+                            ? `≈ $${productoActual.precios[index].toFixed(4)}/bolsa`
+                            : `≈ $${(productoActual.precios[index] * Number(productoActual.porKilo)).toFixed(4)}/kg`}
+                        </p>
                       )}
                       {preciosEditadosManualmente[index] && (
-                        <button type="button" onClick={() => handleRestaurarPrecioAuto(index)} className="text-xs text-blue-500 hover:text-blue-700 underline">
-                          ↺ Usar automático
-                        </button>
+                        <button type="button" onClick={() => handleRestaurarPrecioAuto(index)} className="text-xs text-blue-500 hover:text-blue-700 underline">↺ Usar automático</button>
                       )}
                     </div>
                   ))}
                 </div>
-
                 {calculandoPrecios && (
                   <div className="text-sm text-blue-600 mt-2 flex items-center gap-2">
                     <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
@@ -950,17 +1274,17 @@ export default function FormularioCotizacion({
               {/* Observaciones */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Observaciones del producto (Opcional)</label>
-                <textarea value={productoActual.observacion || ""} onChange={handleObservacionChange} rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white placeholder-gray-400" placeholder="Ej: Impresión a 2 colores, acabado mate, entrega urgente, etc." />
+                <textarea value={productoActual.observacion || ""} onChange={handleObservacionChange} rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white" placeholder="Ej: Impresión a 2 colores, acabado mate, etc." />
               </div>
 
-              <button type="button" onClick={handleAgregarProducto} disabled={guardandoProducto} className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                {guardandoProducto ? (<><div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Guardando producto...</>) : "+ Agregar Producto"}
+              <button type="button" onClick={handleAgregarProducto} disabled={guardandoProducto || hayErrorKg} className={`w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 ${guardandoProducto || hayErrorKg ? "bg-gray-400 cursor-not-allowed text-white" : "bg-green-600 text-white hover:bg-green-700"}`}>
+                {guardandoProducto ? (<><div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Guardando...</>) : hayErrorKg ? "⚠ Corrige las cantidades (mín. 30 kg)" : "+ Agregar Producto"}
               </button>
             </div>
           )}
         </div>
 
-        {/* Lista de productos agregados */}
+        {/* Lista productos agregados */}
         {datos.productos.length > 0 && (
           <div className="mb-6">
             <h4 className="text-sm font-semibold text-gray-700 mb-3">Productos agregados:</h4>
@@ -968,32 +1292,35 @@ export default function FormularioCotizacion({
               {datos.productos.map((prod, index) => (
                 <div key={index} className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{prod.nombre}</p>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold text-gray-900">{prod.nombre}</p>
+                      {prod.modoCantidad === "kilo" && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">Por kilo</span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                       <span>Material: {prod.material}</span>
                       <span>Calibre: {prod.calibre}</span>
                       <span>Tintas: {prod.tintas}</span>
                       <span>Caras: {prod.caras}</span>
-                      {/* 🔥 Mostrar suaje si fue seleccionado */}
-                      {prod.suajeTipo && (
-                        <span className="text-blue-600 font-medium">
-                          Suaje: {prod.suajeTipo}
-                        </span>
-                      )}
-                      {prod.productoId && (
-                        <span className="text-green-600">✓ En BD (ID: {prod.productoId})</span>
-                      )}
+                      {prod.suajeTipo && <span className="text-blue-600 font-medium">Suaje: {prod.suajeTipo}</span>}
+                      {prod.pantones  && <span className="text-purple-600 font-medium">🎨 {prod.pantones}</span>}
+                      {prod.pigmentos && <span className="text-orange-600 font-medium">🧪 {prod.pigmentos}</span>}
                     </div>
                     <div className="mt-2 space-y-1">
                       {prod.cantidades.map((cant, i) => cant > 0 ? (
                         <p key={i} className="text-sm text-gray-700">
-                          {cant.toLocaleString()} unidades × ${prod.precios[i].toFixed(4)} = ${(cant * prod.precios[i]).toFixed(2)}
+                          {prod.modoCantidad === "kilo"
+                            ? `${prod.kilogramos[i]} kg (${cant.toLocaleString()} bolsas) × $${(prod.precios[i] * Number(prod.porKilo || 1)).toFixed(4)}/kg`
+                            : `${cant.toLocaleString()} bolsas × $${prod.precios[i].toFixed(4)}/bolsa`
+                          }
+                          {" = $"}{(cant * prod.precios[i]).toFixed(2)}
                         </p>
                       ) : null)}
                     </div>
                     {prod.observacion && (
                       <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
-                        <span className="font-semibold text-blue-900">Observaciones:</span>
+                        <span className="font-semibold text-blue-900">Obs:</span>
                         <span className="text-blue-800 ml-1">{prod.observacion}</span>
                       </div>
                     )}
@@ -1010,9 +1337,29 @@ export default function FormularioCotizacion({
 
         <div className="flex justify-end gap-3">
           <button type="button" onClick={handleAtras} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Atrás</button>
-          <button type="button" onClick={handleSubmit} disabled={datos.productos.length === 0} className={`px-6 py-2 rounded-lg font-semibold ${datos.productos.length === 0 ? "bg-gray-400 cursor-not-allowed text-gray-200" : "bg-green-600 text-white hover:bg-green-700"}`}>
-            Crear Cotización
-          </button>
+
+          {/* Botón confirmar — aparece cuando hay tipo, material y calibre */}
+          {!productoNuevoListo && datosProductoNuevo.tipoProducto && datosProductoNuevo.material && datosProductoNuevo.calibre && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setProductoNuevoListo(true)}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
+              >
+                Confirmar producto →
+              </button>
+            </div>
+          )}
+
+          {datos.productos.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+            >
+              Crear Cotización
+            </button>
+          )}
         </div>
       </div>
     </div>

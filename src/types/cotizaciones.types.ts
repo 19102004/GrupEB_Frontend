@@ -7,7 +7,7 @@ export interface DetalleCotizacion {
   iddetalle:    number;
   cantidad:     number;
   precio_total: number;
-  aprobado:     boolean | null; // null=pendiente | true=aprobado | false=rechazado
+  aprobado:     boolean | null;
 }
 
 // ============================================================
@@ -40,17 +40,20 @@ export interface ProductoCotizacion {
   tintas: number;
   caras:  number;
 
-  // Booleanos de impresión/acabado
+  // Booleanos de acabado
   bk?:       boolean | null;
   foil?:     boolean | null;
   alto_rel?: boolean | null;
   laminado?: boolean | null;
   uv_br?:    boolean | null;
-  pigmentos?: boolean | null;
-  pantones?:  boolean | null;
 
-  // 🔥 idsuaje: FK integer hacia asa_suaje (null si no aplica)
-  // 🔥 asa_suaje: texto del tipo de suaje (viene del JOIN en el backend)
+  // ✅ pigmentos: string con el nombre del pigmento o null
+  pigmentos?: string | null;
+
+  // ✅ pantones: string con nombres separados por comas "Negro, Blanco, Rojo"
+  //    null si no aplica
+  pantones?: string | null;
+
   idsuaje?:   number | null;
   asa_suaje?: string | null;
 
@@ -73,7 +76,6 @@ export interface Cotizacion {
   telefono:      string;
   correo:        string;
   empresa:       string;
-  // 🔥 Campo impresion viene de clientes.impresion
   impresion?:    string | null;
   productos:     ProductoCotizacion[];
   total:         number;
@@ -88,9 +90,15 @@ export interface ProductoCrearCotizacion {
   precios:      [number, number, number];
   tintasId:     number;
   carasId:      number;
-  // 🔥 idsuaje: FK integer hacia asa_suaje
   idsuaje?:     number | null;
   observacion?: string;
+
+  // ✅ pigmentos: string con el nombre del pigmento o null
+  pigmentos?: string | null;
+
+  // ✅ pantones: string "Negro, Blanco"
+  pantones?: string | null;
+
   [key: string]: any;
 }
 
@@ -111,6 +119,8 @@ export interface ProductoEnviarCotizacion {
   carasId:      number;
   idsuaje?:     number | null;
   observacion?: string;
+  pigmentos?:   boolean | null;
+  pantones?:    string | null;
   detalles:     DetalleCrearCotizacion[];
 }
 

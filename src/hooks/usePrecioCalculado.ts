@@ -32,7 +32,7 @@ export const usePrecioCalculado = ({
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,7 +100,7 @@ export const usePrecioCalculado = ({
 
         console.error("❌ Error al calcular precio:", err);
         setError(
-          err.response?.data?.error || 
+          err.response?.data?.error ||
           "Error al calcular precio. Intenta de nuevo."
         );
         setResultado(null);
@@ -148,12 +148,25 @@ export const usePreciosBatch = ({
   const [resultados, setResultados] = useState<(ResultadoCalculo | null)[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!enabled || !porKilo || !tintasId || !carasId) {
+      setResultados([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    // Filtrar solo las cantidades > 0 y guardar sus índices originales
+    const cantidadesConIndice = cantidades
+      .map((c, i) => ({ cantidad: c, indice: i }))
+      .filter(({ cantidad }) => cantidad > 0);
+
+    // Si no hay ninguna cantidad válida, limpiar y salir
+    if (cantidadesConIndice.length === 0) {
       setResultados([]);
       setLoading(false);
       setError(null);
@@ -175,8 +188,11 @@ export const usePreciosBatch = ({
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
 
+        // Solo mandamos al backend las cantidades > 0
+        const cantidadesFiltradas = cantidadesConIndice.map((c) => c.cantidad);
+
         console.log("🔍 Calculando precios batch en backend:", {
-          cantidades,
+          cantidades: cantidadesFiltradas,
           porKilo,
           tintasId,
           carasId,
@@ -185,7 +201,7 @@ export const usePreciosBatch = ({
         const response = await api.post(
           "/calcular-precios-batch",
           {
-            cantidades,
+            cantidades: cantidadesFiltradas,
             porKilo: Number(porKilo),
             tintasId,
             carasId,
@@ -196,9 +212,22 @@ export const usePreciosBatch = ({
         );
 
         if (!abortController.signal.aborted) {
-          setResultados(response.data.resultados);
+          // Reconstruir array del tamaño original (cantidades.length),
+          // colocando cada resultado en su índice original
+          const resultadosCompletos: (ResultadoCalculo | null)[] = Array(
+            cantidades.length
+          ).fill(null);
+
+          const resultadosBackend: ResultadoCalculo[] =
+            response.data.resultados;
+
+          cantidadesConIndice.forEach(({ indice }, posicionEnBatch) => {
+            resultadosCompletos[indice] = resultadosBackend[posicionEnBatch] ?? null;
+          });
+
+          setResultados(resultadosCompletos);
           setError(null);
-          console.log("✅ Precios batch calculados:", response.data.resultados);
+          console.log("✅ Precios batch calculados:", resultadosCompletos);
         }
       } catch (err: any) {
         if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {

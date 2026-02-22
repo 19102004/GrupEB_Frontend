@@ -10,19 +10,22 @@ export const getCotizaciones = async () => {
 
 // ============================================================
 // CREAR COTIZACIÓN
-// idsuaje es la FK hacia asa_suaje (integer | null)
 // ============================================================
 export const crearCotizacion = async (datos: {
   clienteId?: number;
   productos: {
     productoId?:  number;
     cantidades:   [number, number, number];
+    kilogramos:   [number, number, number];
     precios:      [number, number, number];
     tintasId:     number;
     carasId:      number;
-    // 🔥 idsuaje: FK integer hacia asa_suaje, puede ser null si no aplica
     idsuaje?:     number | null;
     observacion?: string;
+    pantones?:    string | null;
+    pigmentos?:   string | null;
+    modoCantidad?: "unidad" | "kilo";
+    porKilo?:     string | null;
     [key: string]: any;
   }[];
   [key: string]: any;
@@ -36,29 +39,37 @@ export const crearCotizacion = async (datos: {
       throw new Error(`El producto "${prod.nombre}" no tiene ID asignado`);
     }
 
+    const modo = prod.modoCantidad ?? "unidad";
+
     const detalles = prod.cantidades
       .map((cantidad, i) => {
         if (cantidad <= 0 || prod.precios[i] <= 0) return null;
         return {
           cantidad,
           precio_total: Number((cantidad * prod.precios[i]).toFixed(2)),
+          // ✅ modo_cantidad por detalle individual
+          modo_cantidad: modo,
+          // ✅ kilogramos exactos ingresados (solo útiles en modo kilo)
+          kilogramos_ingresados: modo === "kilo" && prod.kilogramos?.[i] > 0
+            ? prod.kilogramos[i]
+            : null,
         };
       })
       .filter(Boolean);
 
     if (detalles.length === 0) {
-      throw new Error(
-        `El producto "${prod.nombre}" no tiene cantidades o precios válidos`
-      );
+      throw new Error(`El producto "${prod.nombre}" no tiene cantidades o precios válidos`);
     }
 
     return {
       productoId:  prod.productoId,
       tintasId:    prod.tintasId,
       carasId:     prod.carasId,
-      // 🔥 Se manda el id del suaje seleccionado (FK integer) o null
-      idsuaje:     prod.idsuaje ?? null,
+      idsuaje:     prod.idsuaje     ?? null,
       observacion: prod.observacion || null,
+      pantones:    prod.pantones    ?? null,
+      pigmentos:   prod.pigmentos   ?? null,
+      porKilo:     prod.porKilo     ?? null,
       detalles,
     };
   });
@@ -73,12 +84,8 @@ export const crearCotizacion = async (datos: {
 
 // ============================================================
 // APROBAR O RECHAZAR UN DETALLE INDIVIDUAL
-// aprobado: true = aprobar | false = rechazar
 // ============================================================
-export const aprobarDetalle = async (
-  detalleId: number,
-  aprobado:  boolean
-) => {
+export const aprobarDetalle = async (detalleId: number, aprobado: boolean) => {
   const response = await api.patch(
     `/cotizaciones/detalle/${detalleId}/aprobar`,
     { aprobado }
@@ -89,10 +96,7 @@ export const aprobarDetalle = async (
 // ============================================================
 // ACTUALIZAR OBSERVACIÓN DE UN PRODUCTO
 // ============================================================
-export const actualizarObservacion = async (
-  productoId:  number,
-  observacion: string
-) => {
+export const actualizarObservacion = async (productoId: number, observacion: string) => {
   const response = await api.patch(
     `/cotizaciones/producto/${productoId}/observacion`,
     { observacion }
@@ -102,12 +106,8 @@ export const actualizarObservacion = async (
 
 // ============================================================
 // ACTUALIZAR ESTADO DE LA COTIZACIÓN
-// estadoId: 1=Pendiente | 2=En proceso | 3=Aprobado | 4=Rechazado
 // ============================================================
-export const actualizarEstado = async (
-  noCotizacion: number,
-  estadoId:     number
-) => {
+export const actualizarEstado = async (noCotizacion: number, estadoId: number) => {
   const response = await api.patch(
     `/cotizaciones/${noCotizacion}/estado`,
     { estadoId }
