@@ -1,31 +1,31 @@
-// generarPdfCotizacion.ts — LANDSCAPE A4 — B&N
+// generarPdfPedido.ts — LANDSCAPE A4 — B&N
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   cargarLogoBase64,
-  val, boolLabel, parsePantones, getMedida, formatFecha, formatCantidadCelda,
+  val, boolLabel, parsePantones, getMedida, formatCantidadCelda,
   dibujarEncabezado, dibujarCajasPie, dibujarPiePagina,
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
 import type { ProductoPdf } from "./Pdfutils";
 
-interface CotizacionPdf {
-  no_cotizacion: number;
-  fecha:         string;
-  cliente:       string;
-  empresa:       string;
-  telefono:      string;
-  correo:        string;
-  estado:        string;
-  impresion?:    string | null;
-  logoBase64?:   string;
-  productos:     ProductoPdf[];
-  total:         number;
+interface PedidoPdf {
+  no_pedido:      number;
+  no_cotizacion?: number | null; // si vino de una cotización, se muestra como referencia
+  fecha:          string;
+  cliente:        string;
+  empresa:        string;
+  telefono:       string;
+  correo:         string;
+  impresion?:     string | null;
+  logoBase64?:    string;
+  productos:      ProductoPdf[];
+  total:          number;
 }
 
-export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<void> {
-  const logoBase64 = cotizacion.logoBase64
+export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
+  const logoBase64 = pedido.logoBase64
     ?? await cargarLogoBase64("/src/assets/logogrupeb.png");
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -35,34 +35,36 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
   const y = dibujarEncabezado({
     doc,
     logoBase64,
-    labelDocumento: "COTIZACION",
-    labelFolio:     "No F",
-    folio:          cotizacion.no_cotizacion,
-    fecha:          cotizacion.fecha,
-    empresa:        cotizacion.empresa,
-    impresion:      cotizacion.impresion,
-    cliente:        cotizacion.cliente,
-    telefono:       cotizacion.telefono,
-    correo:         cotizacion.correo,
+    labelDocumento: "PEDIDO",
+    labelFolio:     "No P",
+    folio:          pedido.no_pedido,
+    // Si vino de cotización, mostrar referencia debajo del folio
+    refTexto:       pedido.no_cotizacion
+      ? `Ref. Cot. #${pedido.no_cotizacion}`
+      : undefined,
+    fecha:          pedido.fecha,
+    empresa:        pedido.empresa,
+    impresion:      pedido.impresion,
+    cliente:        pedido.cliente,
+    telefono:       pedido.telefono,
+    correo:         pedido.correo,
   });
 
   // ── Tabla de productos ────────────────────────────────────────────────────
-  const maxDet      = Math.max(...cotizacion.productos.map(p => p.detalles.length), 1);
-  const numCantCols = Math.min(maxDet, 3);
-
-  const headFixed = [
+  // En pedido solo hay 1 cantidad por producto (la aprobada)
+  const headAll = [
     "Descripción", "Medida", "B/K", "Tintas", "Caras",
     "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
     "Laminado", "UV/BR", "Pantones", "Pigmento",
-  ];
-  const headAll = [
-    ...headFixed,
-    ...Array.from({ length: numCantCols }, (_, i) => `Cant ${i + 1}`),
+    "Cantidad",
   ];
 
   const bodyRows: any[][] = [];
 
-  cotizacion.productos.forEach(prod => {
+  pedido.productos.forEach(prod => {
+    // Tomar el primer detalle con cantidad > 0
+    const det = prod.detalles.find(d => d.cantidad > 0);
+
     const row: any[] = [
       val(prod.nombre),
       getMedida(prod),
@@ -78,24 +80,18 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       boolLabel(prod.uvBr),
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
+      det ? formatCantidadCelda(det, prod.por_kilo) : "—",
     ];
-
-    for (let i = 0; i < numCantCols; i++) {
-      const det = prod.detalles[i];
-      row.push(det && det.cantidad > 0 ? formatCantidadCelda(det, prod.por_kilo) : "—");
-    }
 
     bodyRows.push(row);
 
-    const tieneKilo   = prod.detalles.some(d => d.modo_cantidad === "kilo");
-    const tieneUnidad = prod.detalles.some(d => d.modo_cantidad !== "kilo");
-    const modoLabel   = tieneKilo && tieneUnidad ? "Por kilo y por unidad"
-                      : tieneKilo                ? "Cotizado por kilo"
-                      :                            "Cotizado por unidad";
-    const obsTexto    = prod.observacion?.trim()
+    // Fila de observación
+    const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
+    const modoLabel = tieneKilo ? "Por kilo" : "Por unidad";
+    const obsTexto  = prod.observacion?.trim()
       ? `Obs: ${modoLabel}  —  ${prod.observacion.trim()}`
       : `Obs: ${modoLabel}`;
-    const obsRow = new Array(headAll.length).fill("");
+    const obsRow    = new Array(headAll.length).fill("");
     obsRow[0] = obsTexto;
     bodyRows.push(obsRow);
   });
@@ -107,8 +103,7 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     10: 13, 11: 11, 12: 28, 13: 18,
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
-  const cantW      = Math.max((availW - fixedTotal) / numCantCols, 13);
-  for (let i = 0; i < numCantCols; i++) colW[14 + i] = cantW;
+  colW[14] = Math.max(availW - fixedTotal, 18); // columna única de cantidad
 
   autoTable(doc, {
     startY: y,
@@ -126,7 +121,8 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
       ])
     ),
     didParseCell(data) {
-      if (data.section === "head" && data.column.index >= 14) {
+      // Columna "Cantidad" con color diferente al encabezado para diferenciarla
+      if (data.section === "head" && data.column.index === 14) {
         data.cell.styles.fillColor = GRAY_MED;
       }
       if (data.section === "body") {
@@ -148,16 +144,16 @@ export async function generarPdfCotizacion(cotizacion: CotizacionPdf): Promise<v
     },
   });
 
-  dibujarCajasPie(doc, cotizacion.productos, [
+  dibujarCajasPie(doc, pedido.productos, [
     "• Precios más IVA.",
     "• Tiempo de entrega: 30-35 días después de autorizado el diseño.",
     "• L.A.B. Guadalajara. EL FLETE VA POR CUENTA DEL CLIENTE.",
     "• Condiciones de Pago: 50% ANTICIPO, resto contra entrega.",
-    "• Esta cotización puede variar +/- 10% en la cantidad final.",
-    "• Precios sujetos a cambio sin previo aviso.",
+    "• La cantidad final puede variar +/- 10%.",
+    "• Pedido confirmado — sujeto a disponibilidad de material.",
   ]);
 
-  dibujarPiePagina(doc, "COTIZACION", cotizacion.no_cotizacion, cotizacion.fecha);
+  dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha);
 
-  doc.save(`Cotizacion_${cotizacion.no_cotizacion}.pdf`);
+  doc.save(`Pedido_${pedido.no_pedido}.pdf`);
 }

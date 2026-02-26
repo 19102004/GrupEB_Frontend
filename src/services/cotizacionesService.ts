@@ -1,4 +1,5 @@
 import api from "./api";
+import type { RespuestaActualizarEstado, RespuestaCrearCotizacion } from "../types/cotizaciones.types";
 
 // ============================================================
 // OBTENER COTIZACIONES
@@ -9,27 +10,29 @@ export const getCotizaciones = async () => {
 };
 
 // ============================================================
-// CREAR COTIZACIÓN
+// CREAR COTIZACIÓN O PEDIDO DIRECTO
+// El campo `tipo` determina si se guarda como 'cotizacion' o 'pedido'
 // ============================================================
 export const crearCotizacion = async (datos: {
   clienteId?: number;
+  tipo?:      "cotizacion" | "pedido";
   productos: {
-    productoId?:  number;
-    cantidades:   [number, number, number];
-    kilogramos:   [number, number, number];
-    precios:      [number, number, number];
-    tintasId:     number;
-    carasId:      number;
-    idsuaje?:     number | null;
-    observacion?: string;
-    pantones?:    string | null;
-    pigmentos?:   string | null;
+    productoId?:   number;
+    cantidades:    [number, number, number];
+    kilogramos:    [number, number, number];
+    precios:       [number, number, number];
+    tintasId:      number;
+    carasId:       number;
+    idsuaje?:      number | null;
+    observacion?:  string;
+    pantones?:     string | null;
+    pigmentos?:    string | null;
     modoCantidad?: "unidad" | "kilo";
-    porKilo?:     string | null;
+    porKilo?:      string | null;
     [key: string]: any;
   }[];
   [key: string]: any;
-}) => {
+}): Promise<RespuestaCrearCotizacion> => {
   if (!datos.clienteId) {
     throw new Error("Se requiere clienteId para crear la cotización");
   }
@@ -46,10 +49,8 @@ export const crearCotizacion = async (datos: {
         if (cantidad <= 0 || prod.precios[i] <= 0) return null;
         return {
           cantidad,
-          precio_total: Number((cantidad * prod.precios[i]).toFixed(2)),
-          // ✅ modo_cantidad por detalle individual
-          modo_cantidad: modo,
-          // ✅ kilogramos exactos ingresados (solo útiles en modo kilo)
+          precio_total:          Number((cantidad * prod.precios[i]).toFixed(2)),
+          modo_cantidad:         modo,
           kilogramos_ingresados: modo === "kilo" && prod.kilogramos?.[i] > 0
             ? prod.kilogramos[i]
             : null,
@@ -76,6 +77,7 @@ export const crearCotizacion = async (datos: {
 
   const response = await api.post("/cotizaciones", {
     clienteId: datos.clienteId,
+    tipo:      datos.tipo ?? "cotizacion",
     productos,
   });
 
@@ -106,8 +108,13 @@ export const actualizarObservacion = async (productoId: number, observacion: str
 
 // ============================================================
 // ACTUALIZAR ESTADO DE LA COTIZACIÓN
+// Si el estado es APROBADO (3), el backend convierte automáticamente
+// la cotización a pedido y devuelve convertida_a_pedido + no_pedido
 // ============================================================
-export const actualizarEstado = async (noCotizacion: number, estadoId: number) => {
+export const actualizarEstado = async (
+  noCotizacion: number,
+  estadoId: number
+): Promise<RespuestaActualizarEstado> => {
   const response = await api.patch(
     `/cotizaciones/${noCotizacion}/estado`,
     { estadoId }

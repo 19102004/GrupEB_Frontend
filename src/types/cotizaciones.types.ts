@@ -1,13 +1,13 @@
-// cotizaciones.types.ts
-
 // ============================================================
-// DETALLE DE COTIZACIÓN
+// DETALLE DE COTIZACIÓN / PEDIDO
 // ============================================================
 export interface DetalleCotizacion {
-  iddetalle:    number;
-  cantidad:     number;
-  precio_total: number;
-  aprobado:     boolean | null;
+  iddetalle:     number;
+  cantidad:      number;
+  precio_total:  number;
+  aprobado:      boolean | null;
+  kilogramos?:   number | null;
+  modo_cantidad: "unidad" | "kilo";
 }
 
 // ============================================================
@@ -24,7 +24,7 @@ export interface MedidasProducto {
 }
 
 // ============================================================
-// PRODUCTO EN COTIZACIÓN
+// PRODUCTO EN COTIZACIÓN / PEDIDO
 // ============================================================
 export interface ProductoCotizacion {
   idcotizacion:          number;
@@ -40,24 +40,20 @@ export interface ProductoCotizacion {
   tintas: number;
   caras:  number;
 
-  // Booleanos de acabado
   bk?:       boolean | null;
   foil?:     boolean | null;
   alto_rel?: boolean | null;
   laminado?: boolean | null;
   uv_br?:    boolean | null;
 
-  // ✅ pigmentos: string con el nombre del pigmento o null
   pigmentos?: string | null;
-
-  // ✅ pantones: string con nombres separados por comas "Negro, Blanco, Rojo"
-  //    null si no aplica
-  pantones?: string | null;
+  pantones?:  string | null;
 
   idsuaje?:   number | null;
   asa_suaje?: string | null;
 
   observacion?: string | null;
+  por_kilo?:    string | null;
 
   detalles: DetalleCotizacion[];
   subtotal: number;
@@ -67,50 +63,55 @@ export interface ProductoCotizacion {
 // COTIZACIÓN COMPLETA
 // ============================================================
 export interface Cotizacion {
-  no_cotizacion: number;
-  fecha:         string;
-  estado_id:     number;
-  estado:        string;
-  cliente_id:    number;
-  cliente:       string;
-  telefono:      string;
-  correo:        string;
-  empresa:       string;
-  impresion?:    string | null;
-  productos:     ProductoCotizacion[];
-  total:         number;
+  no_cotizacion:  number;
+  // ✅ Si ya fue convertida a pedido, tendrá este campo
+  no_pedido?:     number | null;
+  // ✅ 'cotizacion' mientras no se aprueba, 'pedido' cuando se aprueba o fue creado directo
+  tipo_documento: "cotizacion" | "pedido";
+  fecha:          string;
+  estado_id:      number;
+  estado:         string;
+  cliente_id:     number;
+  cliente:        string;
+  telefono:       string;
+  correo:         string;
+  empresa:        string;
+  impresion?:     string | null;
+  productos:      ProductoCotizacion[];
+  total:          number;
 }
 
 // ============================================================
-// TIPOS PARA CREAR COTIZACIÓN
+// PEDIDO
+// Puede venir de una cotización aprobada (tiene no_cotizacion)
+// o ser un pedido directo (no_cotizacion es null)
 // ============================================================
-export interface ProductoCrearCotizacion {
-  productoId?:  number;
-  cantidades:   [number, number, number];
-  precios:      [number, number, number];
-  tintasId:     number;
-  carasId:      number;
-  idsuaje?:     number | null;
-  observacion?: string;
-
-  // ✅ pigmentos: string con el nombre del pigmento o null
-  pigmentos?: string | null;
-
-  // ✅ pantones: string "Negro, Blanco"
-  pantones?: string | null;
-
-  [key: string]: any;
+export interface Pedido {
+  no_pedido:      number;
+  no_cotizacion?: number | null;
+  // ✅ true = fue creado directamente como pedido, false = vino de cotización
+  es_directo:     boolean;
+  fecha:          string;
+  estado_id:      number;
+  estado:         string;
+  cliente_id:     number;
+  cliente:        string;
+  telefono:       string;
+  correo:         string;
+  empresa:        string;
+  impresion?:     string | null;
+  productos:      ProductoCotizacion[];
+  total:          number;
 }
 
-export interface DatosCrearCotizacion {
-  clienteId?: number;
-  productos:  ProductoCrearCotizacion[];
-  [key: string]: any;
-}
-
+// ============================================================
+// TIPOS PARA CREAR COTIZACIÓN / PEDIDO
+// ============================================================
 export interface DetalleCrearCotizacion {
-  cantidad:     number;
-  precio_total: number;
+  cantidad:              number;
+  precio_total:          number;
+  modo_cantidad:         "unidad" | "kilo";
+  kilogramos_ingresados?: number | null;
 }
 
 export interface ProductoEnviarCotizacion {
@@ -118,14 +119,25 @@ export interface ProductoEnviarCotizacion {
   tintasId:     number;
   carasId:      number;
   idsuaje?:     number | null;
-  observacion?: string;
-  pigmentos?:   boolean | null;
+  observacion?: string | null;
+  pigmentos?:   string | null;
   pantones?:    string | null;
+  porKilo?:     string | null;
   detalles:     DetalleCrearCotizacion[];
 }
 
 export interface RespuestaCrearCotizacion {
-  message:        string;
-  no_cotizacion:  number;
-  cotizacion_ids: number[];
+  message:       string;
+  no_cotizacion?: number;
+  no_pedido?:    number;
+  tipo:          "cotizacion" | "pedido";
+}
+
+// ============================================================
+// RESPUESTA AL ACTUALIZAR ESTADO (con posible conversión)
+// ============================================================
+export interface RespuestaActualizarEstado {
+  message:             string;
+  convertida_a_pedido: boolean;
+  no_pedido:           number | null;
 }

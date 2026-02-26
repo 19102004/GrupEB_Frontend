@@ -1,6 +1,6 @@
 import Dashboard from "../layouts/Sidebar";
 import Modal from "../components/Modal";
-import FormularioCotizacion from "../components/FormularioCotizacion";
+import FormularioCotizacion from "../components/FormularioSolicitud";
 import EditarCotizacion from "../components/EditarCotizacion";
 import { useState, useEffect } from "react";
 import { getCatalogosPlastico } from "../services/productosPlasticoService";
@@ -99,7 +99,6 @@ export default function Cotizaciones() {
     return cb2 && cb2 !== "0" ? cb2 : "";
   };
 
-  // ✅ Construir productos para PDF — modo_cantidad y kilogramos vienen por detalle
   const buildProductosPdf = (productos: any[]) =>
     productos.map((p: any) => ({
       nombre:             p.nombre,
@@ -119,10 +118,9 @@ export default function Cotizaciones() {
       observacion:        p.observacion          || null,
       por_kilo:           p.por_kilo             || null,
       detalles: (p.detalles || []).map((d: any) => ({
-        cantidad:     d.cantidad,
-        precio_total: d.precio_total,
-        kilogramos:   d.kilogramos    ?? null,
-        // ✅ modo_cantidad por detalle, directo de BD
+        cantidad:      d.cantidad,
+        precio_total:  d.precio_total,
+        kilogramos:    d.kilogramos   ?? null,
         modo_cantidad: d.modo_cantidad || "unidad",
       })),
     }));
@@ -136,7 +134,6 @@ export default function Cotizaciones() {
       await cargarCotizaciones();
       setModalOpen(false);
 
-      // PDF inmediato con datos del formulario
       const productosPdf = datos.productos.map((prod: any) => {
         const modo = prod.modoCantidad || "unidad";
         return {
@@ -160,10 +157,9 @@ export default function Cotizaciones() {
             .map((cant: number, i: number) => {
               if (cant <= 0 || prod.precios[i] <= 0) return null;
               return {
-                cantidad:     cant,
-                precio_total: Number((cant * prod.precios[i]).toFixed(2)),
-                kilogramos:   prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
-                // ✅ modo por detalle
+                cantidad:      cant,
+                precio_total:  Number((cant * prod.precios[i]).toFixed(2)),
+                kilogramos:    prod.kilogramos?.[i] > 0 ? prod.kilogramos[i] : null,
                 modo_cantidad: modo,
               };
             })
@@ -173,7 +169,7 @@ export default function Cotizaciones() {
 
       try {
         await generarPdfCotizacion({
-          no_cotizacion: respuesta.no_cotizacion,
+          no_cotizacion: respuesta.no_cotizacion ?? respuesta.no_pedido ?? 0,
           fecha:         new Date().toISOString(),
           cliente:       datos.cliente  || "",
           empresa:       datos.empresa  || "",
@@ -183,9 +179,7 @@ export default function Cotizaciones() {
           impresion:     datos.impresion ?? null,
           total: datos.productos.reduce((sum: number, prod: any) =>
             sum + prod.cantidades.reduce((s: number, cant: number, i: number) =>
-              cant > 0 && prod.precios[i] > 0 ? s + cant * prod.precios[i] : s
-            , 0)
-          , 0),
+              cant > 0 && prod.precios[i] > 0 ? s + cant * prod.precios[i] : s, 0), 0),
           productos: productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
@@ -196,8 +190,19 @@ export default function Cotizaciones() {
     } finally { setGuardando(false); }
   };
 
-  // ── DESCARGAR PDF DESDE TABLA ─────────────────────────────
+  // ── DESCARGAR PDF ─────────────────────────────────────────
   const handleDescargarPdf = async (cot: Cotizacion) => {
+    const esPedido = cot.tipo_documento === "pedido";
+
+    const productosParaPdf = buildProductosPdf(
+      cot.productos.map(p => ({
+        ...p,
+        detalles: esPedido
+          ? p.detalles.filter(d => d.aprobado === true)
+          : p.detalles,
+      }))
+    );
+
     await generarPdfCotizacion({
       no_cotizacion: cot.no_cotizacion,
       fecha:         cot.fecha,
@@ -207,17 +212,23 @@ export default function Cotizaciones() {
       correo:        cot.correo,
       estado:        cot.estado,
       impresion:     cot.impresion ?? null,
-      total:         cot.total,
-      // ✅ modo_cantidad y kilogramos vienen de BD, por detalle
-      productos:     buildProductosPdf(cot.productos),
+      total:         esPedido
+        ? cot.productos.reduce((sum, p) =>
+            sum + p.detalles
+              .filter(d => d.aprobado === true)
+              .reduce((s, d) => s + d.precio_total, 0), 0)
+        : cot.total,
+      productos: productosParaPdf,
     });
   };
 
-  const handleEliminar = async (no: number) => {
+  // ✅ FIX 1: Solo permite eliminar si NO está aprobada
+  const handleEliminar = async (cot: Cotizacion) => {
+    if (cot.estado === "Aprobada") return;
     if (!confirm("¿Estás seguro de eliminar esta cotización?")) return;
     try {
-      await eliminarCotizacion(no);
-      setCotizaciones(prev => prev.filter(c => c.no_cotizacion !== no));
+      await eliminarCotizacion(cot.no_cotizacion);
+      setCotizaciones(prev => prev.filter(c => c.no_cotizacion !== cot.no_cotizacion));
     } catch (e: any) { alert(e.response?.data?.error || "Error al eliminar"); }
   };
 
@@ -242,7 +253,6 @@ export default function Cotizaciones() {
     catch { return iso; }
   };
 
-  // ✅ Mostrar cantidad en tabla: si modo_cantidad del detalle es "kilo" → mostrar kg
   const formatCantidadTabla = (d: any): string => {
     if (d.modo_cantidad === "kilo" && d.kilogramos && d.kilogramos > 0) {
       const kg = Number.isInteger(d.kilogramos) ? d.kilogramos : Number(d.kilogramos).toFixed(2);
@@ -251,7 +261,6 @@ export default function Cotizaciones() {
     return d.cantidad.toLocaleString();
   };
 
-  // ✅ Badge por detalle — si AL MENOS uno es kilo, mostramos el badge en el producto
   const productoTieneKilos = (p: any): boolean =>
     (p.detalles || []).some((d: any) => d.modo_cantidad === "kilo");
 
@@ -324,11 +333,20 @@ export default function Cotizaciones() {
                 <p className="mt-3 text-gray-500">Cargando cotizaciones...</p>
               </td></tr>
             ) : cotizacionesPagina.length > 0 ? cotizacionesPagina.map(cot => {
-              const expandida = expandidas.has(cot.no_cotizacion);
+              const expandida    = expandidas.has(cot.no_cotizacion);
+              // ✅ FIX 1: calcular si se puede eliminar
+              const puedeEliminar = cot.estado !== "Aprobada";
+
               return (
                 <>
                   <tr key={cot.no_cotizacion} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">#{cot.no_cotizacion}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
+                      #{cot.no_cotizacion}
+                      {/* Badge si ya fue convertida a pedido */}
+                      {cot.no_pedido && (
+                        <span className="ml-2 text-xs text-blue-600 font-normal">→ Pedido #{cot.no_pedido}</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatFecha(cot.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="text-sm font-medium text-gray-900">{cot.cliente || "—"}</p>
@@ -347,13 +365,33 @@ export default function Cotizaciones() {
                     <td className="px-6 py-4 whitespace-nowrap">{estadoBadge(cot.estado)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handleEditar(cot)} title="Gestionar" className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50">
+                        <button
+                          onClick={() => puedeEliminar && handleEditar(cot)}
+                          title={puedeEliminar ? "Gestionar" : "No se puede modificar una cotización aprobada"}
+                          disabled={!puedeEliminar}
+                          className={`p-1.5 rounded-md transition-colors ${
+                            puedeEliminar
+                              ? "text-blue-600 hover:bg-blue-50 cursor-pointer"
+                              : "text-gray-300 cursor-not-allowed"
+                          }`}
+                        >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         </button>
                         <button onClick={() => handleDescargarPdf(cot)} title="Descargar PDF" className="p-1.5 rounded-md text-green-600 hover:bg-green-50">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         </button>
-                        <button onClick={() => handleEliminar(cot.no_cotizacion)} title="Eliminar" className="p-1.5 rounded-md text-red-500 hover:bg-red-50">
+
+                        {/* ✅ FIX 1: Deshabilitado y con tooltip si está aprobada */}
+                        <button
+                          onClick={() => puedeEliminar && handleEliminar(cot)}
+                          title={puedeEliminar ? "Eliminar" : "No se puede eliminar una cotización aprobada"}
+                          disabled={!puedeEliminar}
+                          className={`p-1.5 rounded-md transition-colors ${
+                            puedeEliminar
+                              ? "text-red-500 hover:bg-red-50 cursor-pointer"
+                              : "text-gray-300 cursor-not-allowed"
+                          }`}
+                        >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       </div>
@@ -364,32 +402,39 @@ export default function Cotizaciones() {
                     <tr key={`det-${cot.no_cotizacion}`} className="bg-blue-50 border-t border-blue-100">
                       <td colSpan={8} className="px-8 py-4">
                         <div className="space-y-3">
-                          {cot.productos.map((p: any, i: number) => (
-                            <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
-                                  {/* ✅ Badge si al menos un detalle fue cotizado por kilo */}
-                                  {productoTieneKilos(p) && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Incluye kg</span>
-                                  )}
-                                </div>
-                                {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
-                                {p.pantones && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
-                                {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
-                              </div>
-                              <div className="flex flex-wrap gap-2 flex-shrink-0">
-                                {p.detalles.map((d: any, j: number) => (
-                                  <div key={j} className="text-center bg-gray-50 rounded px-2 py-1 border border-gray-200">
-                                    {/* ✅ Cada detalle muestra su propia unidad */}
-                                    <p className="text-xs font-semibold text-gray-700">{formatCantidadTabla(d)}</p>
-                                    <p className="text-xs text-green-600">${d.precio_total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                          {/* ✅ FIX 2: Si está aprobada, solo mostrar detalles aprobados en el expandido */}
+                          {cot.productos.map((p: any, i: number) => {
+                            const detallesMostrar = cot.estado === "Aprobada"
+                              ? p.detalles.filter((d: any) => d.aprobado === true)
+                              : p.detalles;
+
+                            if (detallesMostrar.length === 0) return null;
+
+                            return (
+                              <div key={i} className="flex items-start gap-4 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
+                                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                    {productoTieneKilos(p) && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Incluye kg</span>
+                                    )}
                                   </div>
-                                ))}
+                                  {p.medidasFormateadas && <p className="text-xs text-gray-400 mt-0.5">Medidas: {p.medidasFormateadas}</p>}
+                                  {p.pantones  && <p className="text-xs text-purple-600 mt-0.5">🎨 {Array.isArray(p.pantones) ? p.pantones.join(", ") : p.pantones}</p>}
+                                  {p.pigmentos && <p className="text-xs text-orange-600 mt-0.5">🧪 {p.pigmentos}</p>}
+                                </div>
+                                <div className="flex flex-wrap gap-2 flex-shrink-0">
+                                  {detallesMostrar.map((d: any, j: number) => (
+                                    <div key={j} className="text-center bg-gray-50 rounded px-2 py-1 border border-gray-200">
+                                      <p className="text-xs font-semibold text-gray-700">{formatCantidadTabla(d)}</p>
+                                      <p className="text-xs text-green-600">${d.precio_total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </td>
                     </tr>

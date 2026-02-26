@@ -15,13 +15,13 @@ const ESTADO_ID = {
 
 interface EditarCotizacionProps {
   cotizacion: Cotizacion;
-  onSave: (cotizacionActualizada: Cotizacion) => void;
-  onCancel: () => void;
+  onSave:     (cotizacionActualizada: Cotizacion) => void;
+  onCancel:   () => void;
 }
 
 function normalizarEstado(estado: string): "Pendiente" | "Aprobada" | "Rechazada" {
   const s = (estado ?? "").toLowerCase().trim();
-  if (s === "aprobado" || s === "aprobada") return "Aprobada";
+  if (s === "aprobado" || s === "aprobada")   return "Aprobada";
   if (s === "rechazado" || s === "rechazada") return "Rechazada";
   return "Pendiente";
 }
@@ -43,6 +43,9 @@ export default function EditarCotizacion({
   const [error,          setError]          = useState<string | null>(null);
   const [mensajeExito,   setMensajeExito]   = useState<string | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState<number | null>(null);
+
+  // ── Modal de confirmación de conversión a pedido ──
+  const [modalConfirmarOpen, setModalConfirmarOpen] = useState(false);
 
   const totalDetallesAprobados = productos
     .flatMap((p) => p.detalles)
@@ -99,6 +102,24 @@ export default function EditarCotizacion({
     }
   };
 
+  // ── Inicia el flujo de aprobación — abre modal si va a convertirse a pedido ──
+  const handleClickAprobar = () => {
+    if (totalDetallesAprobados === 0) return;
+    // Si es una cotización que aún no tiene pedido → mostrar confirmación
+    if (cotizacion.tipo_documento === "cotizacion" && !cotizacion.no_pedido) {
+      setModalConfirmarOpen(true);
+    } else {
+      // Ya es pedido o ya fue aprobada antes → guardar directamente
+      handleCambiarEstado(ESTADO_ID.APROBADO);
+    }
+  };
+
+  // ── Confirma la conversión desde el modal ──
+  const handleConfirmarConversion = () => {
+    setModalConfirmarOpen(false);
+    handleCambiarEstado(ESTADO_ID.APROBADO);
+  };
+
   const handleCambiarEstado = async (estadoId: number) => {
     if (estadoId === ESTADO_ID.RECHAZADO) {
       const msg =
@@ -107,24 +128,38 @@ export default function EditarCotizacion({
           : "¿Estás seguro de rechazar esta cotización?";
       if (!confirm(msg)) return;
     }
+
     setGuardando(true);
     setError(null);
     setMensajeExito(null);
+
     try {
-      await actualizarEstado(cotizacion.no_cotizacion, estadoId);
+      const respuesta = await actualizarEstado(cotizacion.no_cotizacion, estadoId);
+
       const estadoNombre = estadoId === ESTADO_ID.APROBADO ? "Aprobada" : "Rechazada";
       setEstadoActual(estadoNombre);
-      setMensajeExito(
-        estadoId === ESTADO_ID.APROBADO
-          ? "✓ Cotización aprobada exitosamente"
-          : "Cotización marcada como rechazada"
-      );
+
+      if (respuesta.convertida_a_pedido && respuesta.no_pedido) {
+        setMensajeExito(
+          `✓ Cotización aprobada y convertida al Pedido #${respuesta.no_pedido} exitosamente`
+        );
+      } else {
+        setMensajeExito(
+          estadoId === ESTADO_ID.APROBADO
+            ? "✓ Cotización aprobada exitosamente"
+            : "Cotización marcada como rechazada"
+        );
+      }
+
       onSave({
         ...cotizacion,
         productos,
-        estado_id: estadoId,
-        estado:    estadoNombre,
+        estado_id:      estadoId,
+        estado:         estadoNombre,
+        tipo_documento: respuesta.convertida_a_pedido ? "pedido" : cotizacion.tipo_documento,
+        no_pedido:      respuesta.no_pedido ?? cotizacion.no_pedido,
       });
+
     } catch {
       setError("No se pudo actualizar el estado.");
     } finally {
@@ -135,25 +170,84 @@ export default function EditarCotizacion({
   const calcularTotal = () =>
     productos.reduce(
       (sum, prod) =>
-        sum + prod.detalles
+        sum +
+        prod.detalles
           .filter((d) => d.aprobado === true)
           .reduce((s, d) => s + d.precio_total, 0),
       0
     );
 
-  const estadoColor = { Aprobada: "text-green-600", Rechazada: "text-red-600", Pendiente: "text-yellow-600" };
+  const estadoColor = {
+    Aprobada:  "text-green-600",
+    Rechazada: "text-red-600",
+    Pendiente: "text-yellow-600",
+  };
   const estadoIcono = { Aprobada: "✓", Rechazada: "✕", Pendiente: "⏱" };
 
-  // ✅ Parsear pantones: puede venir como string "Negro, Blanco" o array ["Negro","Blanco"]
   const parsearPantones = (pantones: any): string[] => {
     if (!pantones) return [];
     if (Array.isArray(pantones)) return pantones.filter(Boolean);
-    if (typeof pantones === "string") return pantones.split(",").map((p: string) => p.trim()).filter(Boolean);
+    if (typeof pantones === "string")
+      return pantones.split(",").map((p: string) => p.trim()).filter(Boolean);
     return [];
   };
 
   return (
     <div className="space-y-5">
+
+      {/* ── MODAL DE CONFIRMACIÓN DE CONVERSIÓN A PEDIDO ── */}
+      {modalConfirmarOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Convertir a Pedido</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Cotización #{cotizacion.no_cotizacion}</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 space-y-1">
+              <p className="font-semibold">⚠️ Esta acción convertirá la cotización en un pedido.</p>
+              <p>Se le asignará un <strong>folio de pedido nuevo</strong> e independiente.</p>
+              <p>La cotización original seguirá visible en el módulo de <strong>Cotizaciones</strong>.</p>
+              <p>Esta acción <strong>no se puede deshacer</strong>.</p>
+            </div>
+
+            <p className="text-sm text-gray-700">
+              ¿Confirmas que el cliente aprobó esta cotización y deseas convertirla a pedido?
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setModalConfirmarOpen(false)}
+                disabled={guardando}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarConversion}
+                disabled={guardando}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                {guardando ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                Sí, convertir a Pedido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-2">
@@ -166,6 +260,18 @@ export default function EditarCotizacion({
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-start justify-between gap-2">
           <p className="text-green-700 text-sm font-medium">{mensajeExito}</p>
           <button onClick={() => setMensajeExito(null)} className="text-green-400 hover:text-green-700 text-lg leading-none">×</button>
+        </div>
+      )}
+
+      {/* ── Badge si ya es pedido ── */}
+      {cotizacion.tipo_documento === "pedido" && cotizacion.no_pedido && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <span className="text-sm text-blue-800">
+            Esta cotización fue convertida al <strong>Pedido #{cotizacion.no_pedido}</strong>
+          </span>
         </div>
       )}
 
@@ -197,7 +303,7 @@ export default function EditarCotizacion({
 
         <div className="p-4 space-y-4 bg-gray-50">
           {productos.map((prod, iProd) => {
-            const pantonesList = parsearPantones(prod.pantones);
+            const pantonesList  = parsearPantones(prod.pantones);
             const tienePantones = pantonesList.length > 0;
             const tienePigmentos = !!prod.pigmentos;
 
@@ -208,21 +314,17 @@ export default function EditarCotizacion({
                 <div className="mb-3">
                   <h4 className="font-semibold text-gray-900 text-base">{prod.nombre}</h4>
                   <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-500">
-                    {prod.calibre  && <span>Calibre: <strong className="text-gray-700">{prod.calibre}</strong></span>}
+                    {prod.calibre   && <span>Calibre: <strong className="text-gray-700">{prod.calibre}</strong></span>}
                     <span>Tintas: <strong className="text-gray-700">{prod.tintas}</strong></span>
                     <span>Caras: <strong className="text-gray-700">{prod.caras}</strong></span>
                     {prod.asa_suaje && <span>Suaje: <strong className="text-blue-700">{prod.asa_suaje}</strong></span>}
                   </div>
 
-                  {/* ✅ Pantones */}
                   {tienePantones && (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">🎨 Pantones:</span>
                       {pantonesList.map((p, i) => (
-                        <span
-                          key={i}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-medium border border-purple-200"
-                        >
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-medium border border-purple-200">
                           <span className="w-4 h-4 rounded-full bg-purple-400 flex items-center justify-center text-white font-bold text-xs">{i + 1}</span>
                           {p}
                         </span>
@@ -230,7 +332,6 @@ export default function EditarCotizacion({
                     </div>
                   )}
 
-                  {/* ✅ Pigmentos */}
                   {tienePigmentos && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-xs font-semibold text-orange-700 uppercase tracking-wide">🧪 Pigmento:</span>
@@ -289,9 +390,23 @@ export default function EditarCotizacion({
                           </div>
                           <div className="space-y-1 text-sm">
                             <div className="flex justify-between">
-                              <span className="text-gray-500">Cantidad:</span>
-                              <span className="font-bold text-gray-900">{det.cantidad.toLocaleString()}</span>
+                              <span className="text-gray-500">
+                                {det.modo_cantidad === "kilo" && det.kilogramos
+                                  ? "Kilogramos:"
+                                  : "Cantidad:"}
+                              </span>
+                              <span className="font-bold text-gray-900">
+                                {det.modo_cantidad === "kilo" && det.kilogramos
+                                  ? `${Number(det.kilogramos).toFixed(2)} kg`
+                                  : det.cantidad.toLocaleString()}
+                              </span>
                             </div>
+                            {det.modo_cantidad === "kilo" && det.kilogramos && (
+                              <div className="flex justify-between text-xs text-gray-400">
+                                <span>Piezas:</span>
+                                <span>{det.cantidad.toLocaleString()}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
                               <span className="text-gray-500">Precio c/u:</span>
                               <span className="font-semibold text-gray-900">${precioUnit.toFixed(4)}</span>
@@ -344,12 +459,12 @@ export default function EditarCotizacion({
         </div>
       </div>
 
-      {/* Botones */}
+      {/* Botones de acción */}
       <div className="flex flex-col gap-3 pt-4 border-t-2 border-gray-200">
         <div className="grid grid-cols-2 gap-3">
           <button
             disabled={guardando || totalDetallesAprobados === 0}
-            onClick={() => handleCambiarEstado(ESTADO_ID.APROBADO)}
+            onClick={handleClickAprobar}
             title={totalDetallesAprobados === 0 ? "Selecciona al menos una cantidad primero" : ""}
             className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg shadow transition-colors flex items-center justify-center gap-2"
           >
