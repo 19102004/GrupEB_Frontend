@@ -1,4 +1,4 @@
-// generarPdfPedido.ts — LANDSCAPE A4 — B&N
+// generarPdfPedido.ts — LANDSCAPE A4 — mismo diseño que cotización
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -8,11 +8,11 @@ import {
   dibujarEncabezado, dibujarCajasPie, dibujarPiePagina,
   GRAY_DARK, GRAY_MED, GRAY_LIGHT, GRAY_ROW, BLACK, WHITE,
 } from "./Pdfutils";
-import type { ProductoPdf } from "./Pdfutils";
+import type { ProductoPdf, TotalesPdf } from "./Pdfutils";
 
 interface PedidoPdf {
   no_pedido:      number;
-  no_cotizacion?: number | null; // si vino de una cotización, se muestra como referencia
+  no_cotizacion?: number | null;
   fecha:          string;
   cliente:        string;
   empresa:        string;
@@ -21,7 +21,11 @@ interface PedidoPdf {
   impresion?:     string | null;
   logoBase64?:    string;
   productos:      ProductoPdf[];
-  total:          number;
+  subtotal:       number;   // sin IVA — del backend (ventas.subtotal)
+  iva:            number;   // 16%     — del backend (ventas.iva)
+  total:          number;   // con IVA — del backend (ventas.total)
+  anticipo:       number;   // monto anticipo — del backend (ventas.anticipo)
+  saldo:          number;   // pendiente por pagar — del backend (ventas.saldo)
 }
 
 export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
@@ -32,13 +36,13 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
   const PW  = 297;
   const M   = 8;
 
+  // ── Encabezado (idéntico al de cotización) ────────────────────────────────
   const y = dibujarEncabezado({
     doc,
     logoBase64,
     labelDocumento: "PEDIDO",
     labelFolio:     "No P",
     folio:          pedido.no_pedido,
-    // Si vino de cotización, mostrar referencia debajo del folio
     refTexto:       pedido.no_cotizacion
       ? `Ref. Cot. #${pedido.no_cotizacion}`
       : undefined,
@@ -50,8 +54,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     correo:         pedido.correo,
   });
 
-  // ── Tabla de productos ────────────────────────────────────────────────────
-  // En pedido solo hay 1 cantidad por producto (la aprobada)
+  // ── Tabla de productos — 1 sola columna de cantidad (la del pedido) ───────
   const headAll = [
     "Descripción", "Medida", "B/K", "Tintas", "Caras",
     "Material", "Calibre", "Foil", "Asa/Suaje", "Alto Rel",
@@ -65,7 +68,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     // Tomar el primer detalle con cantidad > 0
     const det = prod.detalles.find(d => d.cantidad > 0);
 
-    const row: any[] = [
+    bodyRows.push([
       val(prod.nombre),
       getMedida(prod),
       boolLabel(prod.bk),
@@ -81,21 +84,20 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
       parsePantones(prod.pantones),
       prod.pigmentos ? String(prod.pigmentos).trim() || "—" : "—",
       det ? formatCantidadCelda(det, prod.por_kilo) : "—",
-    ];
+    ]);
 
-    bodyRows.push(row);
-
-    // Fila de observación
+    // Fila observación (igual que cotización)
     const tieneKilo = prod.detalles.some(d => d.modo_cantidad === "kilo");
     const modoLabel = tieneKilo ? "Por kilo" : "Por unidad";
     const obsTexto  = prod.observacion?.trim()
       ? `Obs: ${modoLabel}  —  ${prod.observacion.trim()}`
       : `Obs: ${modoLabel}`;
-    const obsRow    = new Array(headAll.length).fill("");
+    const obsRow = new Array(headAll.length).fill("");
     obsRow[0] = obsTexto;
     bodyRows.push(obsRow);
   });
 
+  // Anchos de columnas — mismos que cotización para las fijas, cantidad ocupa el resto
   const availW = PW - M * 2;
   const colW: Record<number, number> = {
     0: 32, 1: 16, 2: 7, 3: 9, 4: 9,
@@ -103,7 +105,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     10: 13, 11: 11, 12: 28, 13: 18,
   };
   const fixedTotal = Object.values(colW).reduce((a, b) => a + b, 0);
-  colW[14] = Math.max(availW - fixedTotal, 18); // columna única de cantidad
+  colW[14] = Math.max(availW - fixedTotal, 18);  // columna única cantidad
 
   autoTable(doc, {
     startY: y,
@@ -121,7 +123,7 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
       ])
     ),
     didParseCell(data) {
-      // Columna "Cantidad" con color diferente al encabezado para diferenciarla
+      // Columna "Cantidad" con encabezado en gris medio para diferenciarla
       if (data.section === "head" && data.column.index === 14) {
         data.cell.styles.fillColor = GRAY_MED;
       }
@@ -144,14 +146,16 @@ export async function generarPdfPedido(pedido: PedidoPdf): Promise<void> {
     },
   });
 
-  dibujarCajasPie(doc, pedido.productos, [
-    "• Precios más IVA.",
-    "• Tiempo de entrega: 30-35 días después de autorizado el diseño.",
-    "• L.A.B. Guadalajara. EL FLETE VA POR CUENTA DEL CLIENTE.",
-    "• Condiciones de Pago: 50% ANTICIPO, resto contra entrega.",
-    "• La cantidad final puede variar +/- 10%.",
-    "• Pedido confirmado — sujeto a disponibilidad de material.",
-  ]);
+  // ── Cajas de pie — condiciones + resumen con Sub-Total/IVA/Total/Anticipo/Saldo
+  // El pie del pedido no usa condLines — el bloque bancario y firmas
+  // están embebidos directamente en dibujarCajasPie cuando se pasan totales
+  dibujarCajasPie(doc, pedido.productos, [], {
+    subtotal: pedido.subtotal,
+    iva:      pedido.iva,
+    total:    pedido.total,
+    anticipo: pedido.anticipo,
+    saldo:    pedido.saldo,
+  });
 
   dibujarPiePagina(doc, "PEDIDO", pedido.no_pedido, pedido.fecha);
 

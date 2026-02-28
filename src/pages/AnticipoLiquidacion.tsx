@@ -10,6 +10,10 @@ import {
 } from "../services/ventasservice";
 import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
 
+// Estados reales en estado_administrativo_cat
+// 1 = Pendiente | 2 = En proceso (anticipo cubierto) | 6 = Pagado
+const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
+
 // ── helpers ───────────────────────────────────────────────────
 const fmt = (n: number) =>
   Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -22,16 +26,23 @@ const fmtFecha = (iso: string) => {
   } catch { return iso; }
 };
 
-// ── Componente modal de detalle / pagos ───────────────────────
+// Calcula el estado correcto basado en montos
+function calcularEstado(abono: number, anticipo: number, saldo: number): number {
+  if (saldo <= 0.01)        return ESTADO.PAGADO;
+  if (abono >= anticipo)    return ESTADO.EN_PROCESO;
+  return ESTADO.PENDIENTE;
+}
+
+// ── Modal de detalle / pagos ──────────────────────────────────
 function EditarAntLiqReal({
   venta,
   metodos,
   onClose,
   onActualizar,
 }: {
-  venta:       Venta;
-  metodos:     MetodoPago[];
-  onClose:     () => void;
+  venta:        Venta;
+  metodos:      MetodoPago[];
+  onClose:      () => void;
   onActualizar: (v: Venta) => void;
 }) {
   const [monto,        setMonto]        = useState("");
@@ -42,10 +53,15 @@ function EditarAntLiqReal({
   const [eliminando,   setEliminando]   = useState<number | null>(null);
   const [error,        setError]        = useState<string | null>(null);
 
-  const anticipoCubierto = Number(venta.abono) >= Number(venta.anticipo);
-  const saldo            = Number(venta.saldo);
-  const totalPagado      = Number(venta.abono);
-  const total            = Number(venta.total);
+  const anticipo    = Number(venta.anticipo);
+  const saldo       = Number(venta.saldo);
+  const totalPagado = Number(venta.abono);
+  const total       = Number(venta.total);
+
+  // Anticipo restante basado en total pagado
+  const anticipoRestante = Math.max(anticipo - totalPagado, 0);
+  const anticipoCubierto = anticipoRestante <= 0.01;
+  const pagado           = saldo <= 0.01;
 
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);
@@ -118,10 +134,10 @@ function EditarAntLiqReal({
       {/* Resumen financiero */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Subtotal",        value: fmt(venta.subtotal),  color: "text-gray-700" },
-          { label: "IVA 16%",         value: fmt(venta.iva),       color: "text-gray-500" },
-          { label: "Total con IVA",   value: fmt(total),           color: "text-gray-900 font-bold" },
-          { label: "Anticipo (50%)",  value: fmt(venta.anticipo),  color: "text-blue-700 font-semibold" },
+          { label: "Subtotal",       value: fmt(venta.subtotal),           color: "text-gray-700"                 },
+          { label: "IVA 16%",        value: fmt(venta.iva),                color: "text-gray-500"                 },
+          { label: "Total con IVA",  value: fmt(total),                    color: "text-gray-900 font-bold"       },
+          { label: "Anticipo (50%)", value: fmt(anticipo),                 color: "text-blue-700 font-semibold"   },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
             <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -137,7 +153,7 @@ function EditarAntLiqReal({
           <span className="text-sm font-bold text-gray-900">{pctPagado.toFixed(1)}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3 relative">
-          {/* Marca del anticipo al 50% */}
+          {/* Línea marcadora del anticipo (50%) */}
           <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10" style={{ left: "50%" }} />
           <div
             className={`h-3 rounded-full transition-all duration-500 ${
@@ -149,12 +165,16 @@ function EditarAntLiqReal({
         </div>
         <div className="flex justify-between mt-2 text-xs text-gray-500">
           <span>Pagado: <span className="font-semibold text-emerald-700">${fmt(totalPagado)}</span></span>
-          <span>Saldo: <span className={`font-semibold ${saldo > 0 ? "text-red-600" : "text-emerald-600"}`}>
-            {saldo > 0 ? `$${fmt(saldo)}` : "Liquidado ✓"}
+          <span>Saldo: <span className={`font-semibold ${saldo > 0.01 ? "text-red-600" : "text-emerald-600"}`}>
+            {saldo > 0.01 ? `$${fmt(saldo)}` : "Pagado ✓"}
           </span></span>
         </div>
         <p className="text-center text-xs mt-1 text-blue-500">
-          {anticipoCubierto ? "✓ Anticipo cubierto" : "↑ Línea azul = anticipo requerido (50%)"}
+          {pagado
+            ? "✓ Pedido pagado"
+            : anticipoCubierto
+              ? "✓ Anticipo cubierto — falta liquidar saldo"
+              : `↑ Línea azul = anticipo requerido (50%) · Faltan $${fmt(anticipoRestante)}`}
         </p>
       </div>
 
@@ -169,7 +189,9 @@ function EditarAntLiqReal({
               <div key={pago.idventa_pago}
                 className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${pago.es_anticipo ? "bg-blue-100" : "bg-emerald-100"}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    pago.es_anticipo ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                  }`}>
                     {pago.es_anticipo ? "A" : "$"}
                   </div>
                   <div>
@@ -211,7 +233,7 @@ function EditarAntLiqReal({
       </div>
 
       {/* Registrar nuevo pago */}
-      {saldo > 0 ? (
+      {!pagado ? (
         <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
           <h4 className="text-sm font-semibold text-gray-700 mb-4">Registrar pago</h4>
 
@@ -240,15 +262,19 @@ function EditarAntLiqReal({
               {/* Accesos rápidos */}
               <div className="flex gap-2 mt-1 flex-wrap">
                 {!anticipoCubierto && (
-                  <button type="button"
-                    onClick={() => { setMonto(venta.anticipo.toString()); setEsAnticipo(true); }}
-                    className="text-xs text-blue-600 hover:text-blue-800 underline">
-                    Anticipo (${fmt(venta.anticipo)})
+                  <button
+                    type="button"
+                    onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); }}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Anticipo restante (${fmt(anticipoRestante)})
                   </button>
                 )}
-                <button type="button"
-                  onClick={() => setMonto(saldo.toString())}
-                  className="text-xs text-emerald-600 hover:text-emerald-800 underline">
+                <button
+                  type="button"
+                  onClick={() => setMonto(saldo.toFixed(2))}
+                  className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                >
                   Saldo completo (${fmt(saldo)})
                 </button>
               </div>
@@ -281,17 +307,23 @@ function EditarAntLiqReal({
             />
           </div>
 
-          {/* Anticipo checkbox + botón */}
+          {/* Checkbox anticipo — solo si no está cubierto */}
           <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={esAnticipo}
-                onChange={e => setEsAnticipo(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-600">Marcar como anticipo</span>
-            </label>
+            {!anticipoCubierto ? (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={esAnticipo}
+                  onChange={e => setEsAnticipo(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-600">Marcar como anticipo</span>
+              </label>
+            ) : (
+              <span className="text-xs text-emerald-600 font-medium">
+                ✓ Anticipo cubierto — este pago es abono normal
+              </span>
+            )}
 
             <button
               onClick={handleRegistrarPago}
@@ -311,20 +343,18 @@ function EditarAntLiqReal({
           </div>
         </div>
       ) : (
+        /* Pedido pagado */
         <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
           <svg className="w-6 h-6 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-emerald-800 font-semibold text-sm">Pedido liquidado — saldo $0.00</p>
+          <p className="text-emerald-800 font-semibold text-sm">Pedido pagado — saldo $0.00</p>
         </div>
       )}
 
-      {/* Botón cerrar */}
       <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button
-          onClick={onClose}
-          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
-        >
+        <button onClick={onClose}
+          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
           Cerrar
         </button>
       </div>
@@ -390,29 +420,31 @@ export default function AnticipoLiquidacion() {
     );
   });
 
-  // Calcular estado de pago para el badge
+  // Badge de estado usando la misma lógica que el backend
   const getEstadoBadge = (v: Venta) => {
-    const saldo   = Number(v.saldo);
-    const abono   = Number(v.abono);
+    const abono    = Number(v.abono);
     const anticipo = Number(v.anticipo);
+    const saldo    = Number(v.saldo);
+    const estado   = calcularEstado(abono, anticipo, saldo);
 
-    if (saldo <= 0) return (
+    if (estado === ESTADO.PAGADO) return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+        ✓ Pagado
+      </span>
+    );
+
+    if (estado === ESTADO.EN_PROCESO) return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-          ✓ Liquidado
+          🔄 En proceso
+        </span>
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700">
+          ${fmt(saldo)} pendiente
         </span>
       </div>
     );
-    if (abono >= anticipo) return (
-      <div className="flex flex-col gap-1">
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-          💰 Anticipo pagado
-        </span>
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-          ⚠️ ${Number(saldo).toFixed(0)} pendiente
-        </span>
-      </div>
-    );
+
+    // PENDIENTE
     return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -420,7 +452,7 @@ export default function AnticipoLiquidacion() {
         </span>
         {abono > 0 && (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            💰 ${Number(abono).toFixed(0)} pagados
+            💰 ${fmt(abono)} abonados
           </span>
         )}
       </div>
@@ -434,7 +466,6 @@ export default function AnticipoLiquidacion() {
         Gestiona los anticipos y liquidaciones de los pedidos activos.
       </p>
 
-      {/* Buscador */}
       <div className="mb-6 relative">
         <input
           type="text"
@@ -446,12 +477,9 @@ export default function AnticipoLiquidacion() {
         <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        {busqueda && (
-          <p className="mt-2 text-sm text-gray-600">{ventasFiltradas.length} resultado(s)</p>
-        )}
+        {busqueda && <p className="mt-2 text-sm text-gray-600">{ventasFiltradas.length} resultado(s)</p>}
       </div>
 
-      {/* Tabla */}
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -491,8 +519,8 @@ export default function AnticipoLiquidacion() {
                   ${fmt(v.abono)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                  <span className={Number(v.saldo) > 0 ? "text-red-600" : "text-emerald-600"}>
-                    {Number(v.saldo) > 0 ? `$${fmt(v.saldo)}` : "Liquidado"}
+                  <span className={Number(v.saldo) > 0.01 ? "text-red-600" : "text-emerald-600"}>
+                    ${Number(v.saldo) > 0.01 ? fmt(v.saldo) : "0.00"}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -510,16 +538,13 @@ export default function AnticipoLiquidacion() {
               </tr>
             )) : (
               <tr><td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                {busqueda
-                  ? `No se encontraron resultados para "${busqueda}"`
-                  : "No hay ventas registradas"}
+                {busqueda ? `No se encontraron resultados para "${busqueda}"` : "No hay ventas registradas"}
               </td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Modal */}
       <Modal isOpen={modalEditarOpen} onClose={handleCerrar} title="Anticipo y Liquidación">
         {ventaEditando && (
           <EditarAntLiqReal

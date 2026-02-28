@@ -6,7 +6,8 @@ import { getPedidos } from "../services/pedidosService";
 import type { Diseno, DisenoProducto } from "../types/ventas.types";
 import type { Pedido } from "../types/cotizaciones.types";
 
-const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, APROBADO: 3, RECHAZADO: 4 };
+// Estos valores deben coincidir con estado_administrativo_cat en la DB
+const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, APROBADO: 3 } as const;
 
 const fmtFecha = (iso: string) => {
   try {
@@ -16,13 +17,22 @@ const fmtFecha = (iso: string) => {
   } catch { return iso; }
 };
 
-// ── Modal de gestión (reemplaza EditarDiseno hardcodeado) ─────
+// Convierte estado_id a string para el badge
+function estadoLabel(estadoId: number): "pendiente" | "en_proceso" | "aprobado" {
+  if (estadoId === ESTADO.APROBADO)   return "aprobado";
+  if (estadoId === ESTADO.EN_PROCESO) return "en_proceso";
+  return "pendiente";
+}
+
+// ── Modal de gestión ─────────────────────────────────────────
 function EditarDisenoReal({
   pedido,
   onClose,
+  onEstadoChange,
 }: {
-  pedido:  Pedido;
-  onClose: () => void;
+  pedido:         Pedido;
+  onClose:        () => void;
+  onEstadoChange: (noPedido: number, estadoId: number) => void;
 }) {
   const [diseno,    setDiseno]    = useState<Diseno | null>(null);
   const [loading,   setLoading]   = useState(true);
@@ -53,12 +63,15 @@ function EditarDisenoReal({
   const handleCambiarEstado = async (id: number, estadoId: number) => {
     setGuardando(id);
     try {
-      await actualizarEstadoProductoDiseno(id, {
+      const resultado = await actualizarEstadoProductoDiseno(id, {
         estadoId,
         observaciones: obsMap[id] || undefined,
       });
+      // Recargar diseño completo para reflejar contadores actualizados
       const actualizado = await getDisenoByPedido(pedido.no_pedido);
       setDiseno(actualizado);
+      // Propagar estado de cabecera a la tabla
+      onEstadoChange(pedido.no_pedido, resultado.estado_cabecera_id ?? actualizado.estado_id);
     } catch (e: any) {
       alert(e.response?.data?.error || "Error al actualizar estado");
     } finally {
@@ -67,7 +80,7 @@ function EditarDisenoReal({
   };
 
   const handleAprobarTodos = async () => {
-    if (!diseno || !confirm("¿Aprobar TODOS los productos pendientes?")) return;
+    if (!diseno || !confirm("¿Aprobar TODOS los productos?")) return;
     for (const p of diseno.productos) {
       if (p.estado_id !== ESTADO.APROBADO) {
         await handleCambiarEstado(p.iddiseno_producto, ESTADO.APROBADO);
@@ -90,6 +103,14 @@ function EditarDisenoReal({
 
   if (!diseno) return null;
 
+  const total     = diseno.total_productos;
+  const aprobados = diseno.aprobados;
+
+  // La lógica del estado general DEBE coincidir con el backend:
+  // 0 aprobados → pendiente | ≥1 → en_proceso | todos → aprobado
+  const eg = aprobados === total && total > 0 ? "aprobado" :
+             aprobados > 0                    ? "en_proceso" : "pendiente";
+
   return (
     <div className="space-y-5">
 
@@ -104,12 +125,11 @@ function EditarDisenoReal({
       </div>
 
       {/* Contadores */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total",      value: diseno.total_productos, color: "text-gray-700"   },
-          { label: "Aprobados",  value: diseno.aprobados,       color: "text-green-700"  },
-          { label: "Rechazados", value: diseno.rechazados,      color: "text-red-700"    },
-          { label: "Pendientes", value: diseno.pendientes,      color: "text-orange-600" },
+          { label: "Total",      value: total,            color: "text-gray-700"   },
+          { label: "Aprobados",  value: aprobados,        color: "text-green-700"  },
+          { label: "Pendientes", value: diseno.pendientes, color: "text-orange-600" },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
             <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
@@ -120,22 +140,22 @@ function EditarDisenoReal({
 
       {/* Banner estado general */}
       <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
-        diseno.diseno_completado   ? "bg-green-50 border-green-200"   :
-        diseno.tiene_rechazados    ? "bg-orange-50 border-orange-200" :
-                                     "bg-yellow-50 border-yellow-200"
+        eg === "aprobado"   ? "bg-green-50 border-green-200"   :
+        eg === "en_proceso" ? "bg-blue-50 border-blue-200"     :
+                              "bg-yellow-50 border-yellow-200"
       }`}>
         <span className="text-lg">
-          {diseno.diseno_completado ? "✓" : diseno.tiene_rechazados ? "⚠️" : "⏱️"}
+          {eg === "aprobado" ? "✓" : eg === "en_proceso" ? "🔄" : "⏱️"}
         </span>
         <p className={`font-semibold text-sm ${
-          diseno.diseno_completado ? "text-green-800"  :
-          diseno.tiene_rechazados  ? "text-orange-800" : "text-yellow-800"
+          eg === "aprobado"   ? "text-green-800" :
+          eg === "en_proceso" ? "text-blue-800"  : "text-yellow-800"
         }`}>
-          {diseno.diseno_completado
-            ? "Todos los diseños aprobados — listo para producción"
-            : diseno.tiene_rechazados
-              ? "Hay productos rechazados que requieren cambios"
-              : "Diseños pendientes de revisión"}
+          {eg === "aprobado"
+            ? `Aprobado — ${aprobados}/${total} diseños aprobados`
+            : eg === "en_proceso"
+              ? `En proceso — ${aprobados}/${total} diseños aprobados`
+              : `Pendiente — 0/${total} diseños aprobados`}
         </p>
       </div>
 
@@ -153,29 +173,29 @@ function EditarDisenoReal({
         </button>
       )}
 
-      {/* Productos */}
+      {/* Lista de productos */}
       <div className="space-y-3">
         {diseno.productos.map(producto => {
           const isGuardando = guardando === producto.iddiseno_producto;
           const aprobado    = producto.estado_id === ESTADO.APROBADO;
-          const rechazado   = producto.estado_id === ESTADO.RECHAZADO;
+          const enProceso   = producto.estado_id === ESTADO.EN_PROCESO;
 
           return (
             <div key={producto.iddiseno_producto}
               className={`bg-white rounded-xl border-2 p-4 transition-all ${
-                aprobado ? "border-green-200" : rechazado ? "border-red-200" : "border-gray-200"
+                aprobado  ? "border-green-200" :
+                enProceso ? "border-blue-200"  : "border-gray-200"
               }`}
             >
+              {/* Cabecera producto */}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span>{aprobado ? "✓" : rechazado ? "✕" : "⏱️"}</span>
+                  <span>{aprobado ? "✓" : enProceso ? "🔄" : "⏱️"}</span>
                   <p className="text-sm font-semibold text-gray-900 truncate">{producto.nombre}</p>
                 </div>
                 <span className={`flex-shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  aprobado  ? "bg-green-100 text-green-800"  :
-                  rechazado ? "bg-red-100 text-red-800"      :
-                  producto.estado_id === ESTADO.EN_PROCESO
-                            ? "bg-blue-100 text-blue-800"    : "bg-yellow-100 text-yellow-800"
+                  aprobado  ? "bg-green-100 text-green-800" :
+                  enProceso ? "bg-blue-100 text-blue-800"   : "bg-yellow-100 text-yellow-800"
                 }`}>
                   {producto.estado}
                 </span>
@@ -197,8 +217,26 @@ function EditarDisenoReal({
                 />
               </div>
 
-              {/* Botones */}
+              {/* Botones: En proceso | Aprobar | ↺ reset */}
               <div className="flex gap-2">
+                <button
+                  onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.EN_PROCESO)}
+                  disabled={isGuardando || enProceso}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                    enProceso
+                      ? "bg-blue-100 text-blue-700 cursor-default"
+                      : "bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
+                  }`}
+                >
+                  {isGuardando
+                    ? <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                  }
+                  En proceso
+                </button>
+
                 <button
                   onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.APROBADO)}
                   disabled={isGuardando || aprobado}
@@ -217,25 +255,8 @@ function EditarDisenoReal({
                   {aprobado ? "Aprobado" : "Aprobar"}
                 </button>
 
-                <button
-                  onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.RECHAZADO)}
-                  disabled={isGuardando || rechazado}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                    rechazado
-                      ? "bg-red-100 text-red-700 cursor-default"
-                      : "bg-red-500 hover:bg-red-600 text-white disabled:opacity-50"
-                  }`}
-                >
-                  {isGuardando
-                    ? <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                    : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                  }
-                  {rechazado ? "Rechazado" : "Rechazar"}
-                </button>
-
-                {(aprobado || rechazado) && (
+                {/* Reset → solo visible si no está en Pendiente */}
+                {producto.estado_id !== ESTADO.PENDIENTE && (
                   <button
                     onClick={() => handleCambiarEstado(producto.iddiseno_producto, ESTADO.PENDIENTE)}
                     disabled={isGuardando}
@@ -280,15 +301,17 @@ export default function Diseno() {
     finally { setLoading(false); }
   };
 
-  const handleEditar = (pedido: Pedido) => {
-    setPedidoActivo(pedido);
-    setModalOpen(true);
+  // Cuando el modal actualiza un estado, reflejarlo en la tabla inmediatamente
+  const handleEstadoChange = (noPedido: number, estadoId: number) => {
+    setPedidos(prev => prev.map(p =>
+      p.no_pedido === noPedido
+        ? { ...p, diseno_estado_id: estadoId } as any
+        : p
+    ));
   };
 
-  const handleCerrar = () => {
-    setModalOpen(false);
-    setPedidoActivo(null);
-  };
+  const handleEditar = (pedido: Pedido) => { setPedidoActivo(pedido); setModalOpen(true); };
+  const handleCerrar = () => { setModalOpen(false); setPedidoActivo(null); };
 
   const normalizarTexto = (t: string) =>
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,\-]/g, "").trim();
@@ -304,18 +327,22 @@ export default function Diseno() {
   });
 
   const getEstadoBadge = (ped: Pedido) => {
-    const aprobados = ped.productos.filter((p: any) => p.disenoAprobado).length;
-    const todos     = ped.productos.length;
+    // diseno_estado_id viene del backend (pedidosController con LEFT JOIN diseno)
+    const estadoId: number = (ped as any).diseno_estado_id ?? 1;
+    const ef = estadoLabel(estadoId);
+    const todos = ped.productos.length;
+
     return (
       <div className="flex flex-col gap-1">
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          ped.es_directo ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
+          ef === "aprobado"   ? "bg-green-100 text-green-800"  :
+          ef === "en_proceso" ? "bg-blue-100 text-blue-800"    :
+                                "bg-yellow-100 text-yellow-800"
         }`}>
-          {ped.es_directo ? "Directo" : `Cot. #${ped.no_cotizacion}`}
+          {ef === "aprobado"   ? "✓ Aprobado"   :
+           ef === "en_proceso" ? "🔄 En proceso" : "⏱️ Pendiente"}
         </span>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          aprobados === todos && todos > 0 ? "bg-blue-100 text-blue-800" : "bg-orange-50 text-orange-700"
-        }`}>
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700">
           🎨 {todos} diseño(s)
         </span>
       </div>
@@ -342,9 +369,7 @@ export default function Diseno() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-        {busqueda && (
-          <p className="mt-2 text-sm text-gray-600">{filtrados.length} resultado(s)</p>
-        )}
+        {busqueda && <p className="mt-2 text-sm text-gray-600">{filtrados.length} resultado(s)</p>}
       </div>
 
       <div className="overflow-x-auto bg-white rounded-lg shadow">
@@ -364,18 +389,10 @@ export default function Diseno() {
               </td></tr>
             ) : filtrados.length > 0 ? filtrados.map(ped => (
               <tr key={ped.no_pedido} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  #{ped.no_pedido}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {fmtFecha(ped.fecha)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {ped.cliente || "—"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {ped.empresa || "N/A"}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{ped.no_pedido}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(ped.fecha)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ped.cliente || "—"}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ped.empresa || "N/A"}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">
                   <div className="max-w-xs">
                     {ped.productos.length} producto(s)
@@ -386,29 +403,20 @@ export default function Diseno() {
                           <span>{(p.nombre || "Producto").substring(0, 30)}...</span>
                         </div>
                       ))}
-                      {ped.productos.length > 2 && (
-                        <div>+ {ped.productos.length - 2} más</div>
-                      )}
+                      {ped.productos.length > 2 && <div>+ {ped.productos.length - 2} más</div>}
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {getEstadoBadge(ped)}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(ped)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleEditar(ped)}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
+                  <button onClick={() => handleEditar(ped)} className="text-blue-600 hover:text-blue-900">
                     Ver/Editar
                   </button>
                 </td>
               </tr>
             )) : (
               <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                {busqueda
-                  ? `No se encontraron pedidos que coincidan con "${busqueda}"`
-                  : "No hay pedidos registrados"}
+                {busqueda ? `No se encontraron pedidos para "${busqueda}"` : "No hay pedidos registrados"}
               </td></tr>
             )}
           </tbody>
@@ -420,6 +428,7 @@ export default function Diseno() {
           <EditarDisenoReal
             pedido={pedidoActivo}
             onClose={handleCerrar}
+            onEstadoChange={handleEstadoChange}
           />
         )}
       </Modal>

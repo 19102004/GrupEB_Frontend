@@ -6,6 +6,7 @@ import { getCatalogosPlastico } from "../services/productosPlasticoService";
 import { getPedidos, eliminarPedido } from "../services/pedidosService";
 import { crearCotizacion } from "../services/cotizacionesService";
 import { generarPdfPedido } from "../services/generarPdfPedido";
+import { getVentaByPedido } from "../services/ventasservice";
 import type { CatalogosPlastico } from "../types/productos-plastico.types";
 import type { Pedido } from "../types/cotizaciones.types";
 
@@ -161,6 +162,8 @@ export default function Pedidos() {
       });
 
       try {
+        // ✅ Traer subtotal/iva/total del backend — no calcular en frontend
+        const venta = await getVentaByPedido(respuesta.no_pedido!);
         await generarPdfPedido({
           no_pedido:     respuesta.no_pedido!,
           no_cotizacion: null,
@@ -170,10 +173,12 @@ export default function Pedidos() {
           telefono:      datos.telefono || "",
           correo:        datos.correo   || "",
           impresion:     datos.impresion ?? null,
-          total: datos.productos.reduce((sum: number, prod: any) =>
-            sum + prod.cantidades.reduce((s: number, cant: number, i: number) =>
-              cant > 0 && prod.precios[i] > 0 ? s + cant * prod.precios[i] : s, 0), 0),
-          productos: productosPdf,
+          subtotal:      Number(venta.subtotal),
+          iva:           Number(venta.iva),
+          total:         Number(venta.total),
+          anticipo:      Number(venta.anticipo),
+          saldo:         Number(venta.saldo),
+          productos:     productosPdf,
         });
       } catch (pdfErr) { console.warn("⚠️ PDF:", pdfErr); }
 
@@ -185,18 +190,29 @@ export default function Pedidos() {
 
   // ── DESCARGAR PDF ─────────────────────────────────────────
   const handleDescargarPdf = async (ped: Pedido) => {
-    await generarPdfPedido({
-      no_pedido:     ped.no_pedido,
-      no_cotizacion: ped.no_cotizacion ?? null,
-      fecha:         ped.fecha,
-      cliente:       ped.cliente,
-      empresa:       ped.empresa,
-      telefono:      ped.telefono,
-      correo:        ped.correo,
-      impresion:     ped.impresion ?? null,
-      total:         ped.total,
-      productos:     buildProductosPdf(ped.productos),
-    });
+    try {
+      // ✅ subtotal/iva/total vienen del backend — no calcular en frontend
+      const venta = await getVentaByPedido(ped.no_pedido);
+      await generarPdfPedido({
+        no_pedido:     ped.no_pedido,
+        no_cotizacion: ped.no_cotizacion ?? null,
+        fecha:         ped.fecha,
+        cliente:       ped.cliente,
+        empresa:       ped.empresa,
+        telefono:      ped.telefono,
+        correo:        ped.correo,
+        impresion:     ped.impresion ?? null,
+        subtotal:      Number(venta.subtotal),
+        iva:           Number(venta.iva),
+        total:         Number(venta.total),
+        anticipo:      Number(venta.anticipo),
+        saldo:         Number(venta.saldo),
+        productos:     buildProductosPdf(ped.productos),
+      });
+    } catch (e) {
+      console.error("❌ Error al obtener venta para PDF:", e);
+      alert("No se pudo generar el PDF. Verifica que la venta esté registrada.");
+    }
   };
 
   // ── CANCELAR PEDIDO ───────────────────────────────────────
@@ -218,7 +234,14 @@ export default function Pedidos() {
       await eliminarPedido(ped.no_pedido);
       setPedidos(prev => prev.filter(p => p.no_pedido !== ped.no_pedido));
     } catch (e: any) {
-      alert(e.response?.data?.error || "Error al cancelar el pedido");
+      const data = e.response?.data;
+      if (data?.motivo === "pagos") {
+        alert(`🚫 No se puede cancelar el Pedido #${ped.no_pedido}\n\n${data.detalle}`);
+      } else if (data?.motivo === "diseno") {
+        alert(`🚫 No se puede cancelar el Pedido #${ped.no_pedido}\n\n${data.detalle}`);
+      } else {
+        alert(data?.error || "Error al cancelar el pedido");
+      }
     }
   };
 
