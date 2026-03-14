@@ -97,6 +97,8 @@ const CAMPOS_PROCESO: Record<string, { key: string; label: string; readOnly?: bo
   ],
 };
 
+const MAQUINAS_IMPRESION = ["kidder", "sicosa"] as const;
+
 function calcularExtrusion(pedido: PedidoSeguimiento) {
   const alto     = parseFloat(pedido.altura)        || 0;
   const ancho    = parseFloat(pedido.ancho)         || 0;
@@ -126,6 +128,7 @@ function calcularExtrusion(pedido: PedidoSeguimiento) {
   };
 }
 
+// ── Tarjeta de datos del producto ────────────────────────────
 function TarjetaProducto({ pedido }: { pedido: PedidoSeguimiento }) {
   const cantidad = pedido.modo_cantidad === "kilo" && pedido.kilogramos_orden
     ? `${pedido.kilogramos_orden} kg`
@@ -137,15 +140,15 @@ function TarjetaProducto({ pedido }: { pedido: PedidoSeguimiento }) {
         {pedido.medida && <span className="font-normal text-gray-500"> · {pedido.medida}</span>}
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-700">
-        {pedido.material && <span><span className="text-gray-400">Material </span>{pedido.material}</span>}
-        {pedido.calibre && <span><span className="text-gray-400">Calibre </span>{pedido.calibre}</span>}
+        {pedido.material  && <span><span className="text-gray-400">Material </span>{pedido.material}</span>}
+        {pedido.calibre   && <span><span className="text-gray-400">Calibre </span>{pedido.calibre}</span>}
         <span><span className="text-gray-400">Cantidad </span>{cantidad}</span>
         {pedido.tintas != null && <span><span className="text-gray-400">Tintas </span>{pedido.tintas}</span>}
-        {pedido.caras != null && <span><span className="text-gray-400">Caras </span>{pedido.caras}</span>}
-        {pedido.asa_suaje && <span><span className="text-gray-400">Asa / Suaje </span>{pedido.asa_suaje}</span>}
-        {pedido.pigmentos && <span><span className="text-gray-400">Pigmento </span>{pedido.pigmentos}</span>}
-        {pedido.pantones && <span><span className="text-gray-400">Pantones </span>{pedido.pantones}</span>}
-        {pedido.bk && <span className="px-1.5 py-0.5 bg-gray-800 text-white rounded text-xs">BK</span>}
+        {pedido.caras  != null && <span><span className="text-gray-400">Caras </span>{pedido.caras}</span>}
+        {pedido.asa_suaje  && <span><span className="text-gray-400">Asa / Suaje </span>{pedido.asa_suaje}</span>}
+        {pedido.pigmentos  && <span><span className="text-gray-400">Pigmento </span>{pedido.pigmentos}</span>}
+        {pedido.pantones   && <span><span className="text-gray-400">Pantones </span>{pedido.pantones}</span>}
+        {pedido.bk   && <span className="px-1.5 py-0.5 bg-gray-800 text-white rounded text-xs">BK</span>}
         {pedido.foil && <span className="px-1.5 py-0.5 bg-yellow-500 text-white rounded text-xs">FOIL</span>}
       </div>
       {pedido.observacion && (
@@ -153,6 +156,75 @@ function TarjetaProducto({ pedido }: { pedido: PedidoSeguimiento }) {
           {pedido.observacion}
         </p>
       )}
+    </div>
+  );
+}
+
+// ── Tarjeta de merma — 4 campos visuales ─────────────────────
+function TarjetaMerma({ pedido }: { pedido: PedidoSeguimiento }) {
+  const kilos       = (pedido as any).kilos;
+  const kilos_merma = (pedido as any).kilos_merma;
+  const pzas        = (pedido as any).pzas;
+  const pzas_merma  = (pedido as any).pzas_merma;
+
+  if (kilos == null && pzas == null) return null;
+
+  const fmt = (n: number | null | undefined, decimales = 2) =>
+    n != null
+      ? Number(n).toLocaleString("es-MX", { maximumFractionDigits: decimales })
+      : "—";
+
+  return (
+    <div className="rounded-lg border-2 border-amber-300 overflow-hidden">
+      <div className="bg-amber-500 px-3 py-1.5 flex items-center gap-2">
+        <span className="text-sm">📊</span>
+        <p className="text-xs font-bold text-white uppercase tracking-wide">
+          Merma del Pedido
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-amber-200">
+
+        {/* Kilos sin merma */}
+        <div className="bg-white px-3 py-2 text-center">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
+            Kilos sin merma
+          </p>
+          <p className="text-base font-bold text-gray-800">
+            {fmt(kilos)} kg
+          </p>
+        </div>
+
+        {/* Kilos con merma */}
+        <div className="bg-amber-50 px-3 py-2 text-center">
+          <p className="text-[10px] text-amber-600 uppercase tracking-wide mb-0.5 font-semibold">
+            Kilos con merma
+          </p>
+          <p className="text-base font-bold text-amber-700">
+            {fmt(kilos_merma)} kg
+          </p>
+        </div>
+
+        {/* Pzas sin merma */}
+        <div className="bg-white px-3 py-2 text-center border-t border-amber-200">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
+            Pzas sin merma
+          </p>
+          <p className="text-base font-bold text-gray-800">
+            {fmt(pzas, 0)}
+          </p>
+        </div>
+
+        {/* Pzas con merma */}
+        <div className="bg-amber-50 px-3 py-2 text-center border-t border-amber-200">
+          <p className="text-[10px] text-amber-600 uppercase tracking-wide mb-0.5 font-semibold">
+            Pzas con merma
+          </p>
+          <p className="text-base font-bold text-amber-700">
+            {fmt(pzas_merma, 0)}
+          </p>
+        </div>
+
+      </div>
     </div>
   );
 }
@@ -190,7 +262,6 @@ function ModalProcesoIndividual({
   const calculados = nombreProceso === "extrusion" ? calcularExtrusion(pedido) : null;
   const campos = CAMPOS_PROCESO[nombreProceso] ?? [];
 
-  // Texto de repetición de la máquina seleccionada (el texto completo que se guarda en BD)
   const repeticionMaquina = maquinaSeleccionada === "kidder"
     ? (datos?.repeticion_kidder ?? null)
     : maquinaSeleccionada === "sicosa"
@@ -224,8 +295,7 @@ function ModalProcesoIndividual({
     try {
       const datosProceso: Record<string, any> = {};
       if (nombreProceso === "impresion" && maquinaSeleccionada) {
-        datosProceso.maquina = maquinaSeleccionada;
-        // ── CAMBIO: enviar también el texto completo de repetición ──
+        datosProceso.maquina    = maquinaSeleccionada;
         datosProceso.repeticion = repeticionMaquina ?? null;
       }
       await iniciarProceso(pedido.idproduccion, datosProceso);
@@ -276,6 +346,7 @@ function ModalProcesoIndividual({
 
   return (
     <div className="space-y-4 min-w-[440px]">
+      {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div>
           <p className="font-bold text-gray-900">{pedido.no_produccion}</p>
@@ -288,8 +359,13 @@ function ModalProcesoIndividual({
         )}
       </div>
 
+      {/* Tarjeta producto */}
       <TarjetaProducto pedido={pedido} />
 
+      {/* ── Tarjeta de merma ─────────────────────────────── */}
+      <TarjetaMerma pedido={pedido} />
+
+      {/* Bloque de cálculo de bobina (solo extrusión) */}
       {calculados && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2">
@@ -350,14 +426,12 @@ function ModalProcesoIndividual({
                   <span className="text-gray-800 font-medium">{new Date(proc.registro.fecha_fin).toLocaleString("es-MX")}</span>
                 </div>
               )}
-              {/* ── Máquina ── */}
               {nombreProceso === "impresion" && proc.registro.maquina && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Máquina</span>
                   <span className="font-semibold text-indigo-700 capitalize">{proc.registro.maquina}</span>
                 </div>
               )}
-              {/* ── CAMBIO: mostrar repetición guardada ── */}
               {nombreProceso === "impresion" && proc.registro.repeticion && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Repetición</span>
@@ -396,7 +470,7 @@ function ModalProcesoIndividual({
             <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{error}</div>
           )}
 
-          {/* ── Selector de máquina — solo impresión pendiente ── */}
+          {/* Selector de máquina — solo impresión pendiente */}
           {nombreProceso === "impresion" && puedeIniciar && accion !== "finalizar" && (
             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-2">
               <p className="text-xs font-semibold text-indigo-800 uppercase tracking-wide">
@@ -500,30 +574,57 @@ function BotonPdfDirecto({ pedido }: { pedido: PedidoSeguimiento }) {
       const producto: OrdenProduccionProducto | undefined = data.productos.find(p => p.no_produccion === pedido.no_produccion);
       if (!producto) { alert("No se encontró la orden."); return; }
       await generarPdfOrdenProduccion({
-        no_pedido: data.no_pedido, no_produccion: producto.no_produccion,
-        fecha: data.fecha, fecha_produccion: producto.fecha_produccion,
+        no_pedido:               data.no_pedido,
+        no_produccion:           producto.no_produccion,
+        fecha:                   data.fecha,
+        fecha_produccion:        producto.fecha_produccion,
         fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
-        cliente: data.cliente, empresa: data.empresa, telefono: data.telefono,
-        correo: data.correo, impresion: data.impresion,
-        nombre_producto: producto.nombre_producto, categoria: producto.categoria,
-        material: producto.material, calibre: producto.calibre, medida: producto.medida,
-        altura: producto.altura, ancho: producto.ancho, fuelle_fondo: producto.fuelle_fondo,
-        fuelle_lat_iz: producto.fuelle_lat_iz, fuelle_lat_de: producto.fuelle_lat_de,
-        refuerzo: producto.refuerzo, por_kilo: producto.por_kilo, medidas: producto.medidas,
-        tintas: producto.tintas, caras: producto.caras, bk: producto.bk, foil: producto.foil,
-        alto_rel: producto.alto_rel, laminado: producto.laminado, uv_br: producto.uv_br,
-        pigmentos: producto.pigmentos, pantones: producto.pantones, asa_suaje: producto.asa_suaje,
-        observacion: producto.observacion, cantidad: producto.cantidad,
-        kilogramos: producto.kilogramos, modo_cantidad: producto.modo_cantidad,
-        repeticion_extrusion: producto.repeticion_extrusion ?? null,
-        repeticion_metro:     producto.repeticion_metro     ?? null,
-        metros:               producto.metros               ?? null,
-        ancho_bobina:         producto.ancho_bobina         ?? null,
-        kilos:                producto.kilos                ?? null,
-        repeticion_kidder:    producto.repeticion_kidder    ?? null,
-        repeticion_sicosa:    producto.repeticion_sicosa    ?? null,
-        kilos_extruir:        producto.kilos_extruir        ?? null,
-        metros_extruir:       producto.metros_extruir       ?? null,
+        observaciones_diseno:    producto.observaciones_diseno    ?? null,
+        cliente:                 data.cliente,
+        empresa:                 data.empresa,
+        telefono:                data.telefono,
+        correo:                  data.correo,
+        impresion:               data.impresion,
+        nombre_producto:         producto.nombre_producto,
+        categoria:               producto.categoria,
+        material:                producto.material,
+        calibre:                 producto.calibre,
+        medida:                  producto.medida,
+        altura:                  producto.altura,
+        ancho:                   producto.ancho,
+        fuelle_fondo:            producto.fuelle_fondo,
+        fuelle_lat_iz:           producto.fuelle_lat_iz,
+        fuelle_lat_de:           producto.fuelle_lat_de,
+        refuerzo:                producto.refuerzo,
+        por_kilo:                producto.por_kilo,
+        medidas:                 producto.medidas,
+        tintas:                  producto.tintas,
+        caras:                   producto.caras,
+        bk:                      producto.bk,
+        foil:                    producto.foil,
+        alto_rel:                producto.alto_rel,
+        laminado:                producto.laminado,
+        uv_br:                   producto.uv_br,
+        pigmentos:               producto.pigmentos,
+        pantones:                producto.pantones,
+        asa_suaje:               producto.asa_suaje,
+        observacion:             producto.observacion,
+        cantidad:                producto.cantidad,
+        kilogramos:              producto.kilogramos,
+        modo_cantidad:           producto.modo_cantidad,
+        repeticion_extrusion:    producto.repeticion_extrusion ?? null,
+        repeticion_metro:        producto.repeticion_metro     ?? null,
+        metros:                  producto.metros               ?? null,
+        ancho_bobina:            producto.ancho_bobina         ?? null,
+        repeticion_kidder:       producto.repeticion_kidder    ?? null,
+        repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
+        fecha_entrega:           producto.fecha_entrega        ?? null,
+        kilos:                   producto.kilos                ?? null,
+        kilos_merma:             producto.kilos_merma          ?? null,
+        pzas:                    producto.pzas                 ?? null,
+        pzas_merma:              producto.pzas_merma           ?? null,
+        kilos_extruir:           producto.kilos_extruir        ?? null,
+        metros_extruir:          producto.metros_extruir       ?? null,
       });
     } catch { alert("No se pudo generar el PDF."); }
     finally { setDescargando(false); }
@@ -589,7 +690,7 @@ export default function Seguimiento() {
   const renderFila = (pedido: PedidoSeguimiento, grande = false) => {
     const px = grande ? "px-4 py-3" : "px-3 py-2";
     const txt = grande ? "text-sm" : "text-xs";
-    const estadoAnticipo = pedido.anticipo_cubierto ? "pagado" : "pendiente";
+    const estadoAnticipo = pedido.anticipo_cubierto ? "pagado"   : "pendiente";
     const estadoDiseño   = pedido.diseno_aprobado   ? "aprobado" : "pendiente";
     const estadoPago     = pedido.pago_completo ? "pagado" : pedido.anticipo_cubierto ? "proceso" : "pendiente";
     const tieneOrden     = !!pedido.no_produccion && !!pedido.idproduccion;

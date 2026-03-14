@@ -26,6 +26,7 @@ export interface OrdenProduccionProducto {
   idproduccion:            number | null;
   fecha_produccion:        string | null;
   fecha_aprobacion_diseno: string | null;
+  observaciones_diseno:    string | null;
   tiene_orden:             boolean;
   nombre_producto:         string;
   categoria:               string;
@@ -58,9 +59,15 @@ export interface OrdenProduccionProducto {
   repeticion_metro:        number | null;
   metros:                  number | null;
   ancho_bobina:            number | null;
-  kilos:                   number | null;
   repeticion_kidder:       string | null;
   repeticion_sicosa:       string | null;
+  fecha_entrega:           string | null;
+  // ── Campos de merma ───────────────────────────────────────
+  kilos:                   number | null;
+  kilos_merma:             number | null;
+  pzas:                    number | null;
+  pzas_merma:              number | null;
+  // ── Progreso real de extrusión ────────────────────────────
   kilos_extruir:           number | null;
   metros_extruir:          number | null;
 }

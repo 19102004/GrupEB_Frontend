@@ -43,6 +43,7 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     fecha:                   data.fecha,
     fecha_produccion:        producto.fecha_produccion,
     fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
+    observaciones_diseno:    producto.observaciones_diseno    ?? null,
     cliente:                 data.cliente,
     empresa:                 data.empresa,
     telefono:                data.telefono,
@@ -75,15 +76,21 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
     modo_cantidad:           producto.modo_cantidad,
-    repeticion_extrusion:    producto.repeticion_extrusion    ?? null,
-    repeticion_metro:        producto.repeticion_metro        ?? null,
-    metros:                  producto.metros                  ?? null,
-    ancho_bobina:            producto.ancho_bobina            ?? null,
-    kilos:                   producto.kilos                   ?? null,
-    repeticion_kidder:       producto.repeticion_kidder       ?? null,
-    repeticion_sicosa:       producto.repeticion_sicosa       ?? null,
-    kilos_extruir:           producto.kilos_extruir           ?? null,
-    metros_extruir:          producto.metros_extruir          ?? null,
+    repeticion_extrusion:    producto.repeticion_extrusion ?? null,
+    repeticion_metro:        producto.repeticion_metro     ?? null,
+    metros:                  producto.metros               ?? null,
+    ancho_bobina:            producto.ancho_bobina         ?? null,
+    repeticion_kidder:       producto.repeticion_kidder    ?? null,
+    repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
+    fecha_entrega:           producto.fecha_entrega        ?? null,
+    // ── campos de merma ───────────────────────────────────────
+    kilos:                   producto.kilos                ?? null,
+    kilos_merma:             producto.kilos_merma          ?? null,
+    pzas:                    producto.pzas                 ?? null,
+    pzas_merma:              producto.pzas_merma           ?? null,
+    // ── progreso real de extrusión ────────────────────────────
+    kilos_extruir:           producto.kilos_extruir        ?? null,
+    metros_extruir:          producto.metros_extruir       ?? null,
   });
 }
 

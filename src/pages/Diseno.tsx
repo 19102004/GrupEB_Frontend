@@ -36,6 +36,7 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     fecha:                   data.fecha,
     fecha_produccion:        producto.fecha_produccion,
     fecha_aprobacion_diseno: producto.fecha_aprobacion_diseno,
+    observaciones_diseno:    producto.observaciones_diseno    ?? null,
     cliente:                 data.cliente,
     empresa:                 data.empresa,
     telefono:                data.telefono,
@@ -68,15 +69,21 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     cantidad:                producto.cantidad,
     kilogramos:              producto.kilogramos,
     modo_cantidad:           producto.modo_cantidad,
-    repeticion_extrusion:    producto.repeticion_extrusion    ?? null,
-    repeticion_metro:        producto.repeticion_metro        ?? null,
-    metros:                  producto.metros                  ?? null,
-    ancho_bobina:            producto.ancho_bobina            ?? null,
-    kilos:                   producto.kilos                   ?? null,
-    repeticion_kidder:       producto.repeticion_kidder       ?? null,
-    repeticion_sicosa:       producto.repeticion_sicosa       ?? null,
-    kilos_extruir:           producto.kilos_extruir           ?? null,
-    metros_extruir:          producto.metros_extruir          ?? null,
+    repeticion_extrusion:    producto.repeticion_extrusion ?? null,
+    repeticion_metro:        producto.repeticion_metro     ?? null,
+    metros:                  producto.metros               ?? null,
+    ancho_bobina:            producto.ancho_bobina         ?? null,
+    repeticion_kidder:       producto.repeticion_kidder    ?? null,
+    repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
+    fecha_entrega:           producto.fecha_entrega        ?? null,
+    // ── campos de merma ───────────────────────────────────────
+    kilos:                   producto.kilos                ?? null,
+    kilos_merma:             producto.kilos_merma          ?? null,
+    pzas:                    producto.pzas                 ?? null,
+    pzas_merma:              producto.pzas_merma           ?? null,
+    // ── progreso real de extrusión ────────────────────────────
+    kilos_extruir:           producto.kilos_extruir        ?? null,
+    metros_extruir:          producto.metros_extruir       ?? null,
   });
 }
 
@@ -325,6 +332,33 @@ function EditarDisenoReal({
                       : `${Number(producto.cantidad).toLocaleString()} piezas`
                     }
                   </p>
+                </div>
+              )}
+
+              {/* ── Datos de merma si la orden ya fue generada ── */}
+              {producto.orden_generada && (producto.kilos != null || producto.pzas != null) && (
+                <div className="mb-3 rounded-lg border-2 border-amber-200 overflow-hidden">
+                  <div className="bg-amber-400 px-3 py-1">
+                    <p className="text-xs font-bold text-white uppercase tracking-wide">📊 Merma</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-px bg-amber-100">
+                    <div className="bg-white px-3 py-1.5 text-center">
+                      <p className="text-[10px] text-gray-400 uppercase">Kilos sin merma</p>
+                      <p className="text-sm font-bold text-gray-800">{producto.kilos != null ? Number(producto.kilos).toFixed(2) : "—"} kg</p>
+                    </div>
+                    <div className="bg-amber-50 px-3 py-1.5 text-center">
+                      <p className="text-[10px] text-amber-600 uppercase font-semibold">Kilos con merma</p>
+                      <p className="text-sm font-bold text-amber-700">{producto.kilos_merma != null ? Number(producto.kilos_merma).toFixed(2) : "—"} kg</p>
+                    </div>
+                    <div className="bg-white px-3 py-1.5 text-center border-t border-amber-100">
+                      <p className="text-[10px] text-gray-400 uppercase">Pzas sin merma</p>
+                      <p className="text-sm font-bold text-gray-800">{producto.pzas != null ? Number(producto.pzas).toLocaleString("es-MX") : "—"}</p>
+                    </div>
+                    <div className="bg-amber-50 px-3 py-1.5 text-center border-t border-amber-100">
+                      <p className="text-[10px] text-amber-600 uppercase font-semibold">Pzas con merma</p>
+                      <p className="text-sm font-bold text-amber-700">{producto.pzas_merma != null ? Number(producto.pzas_merma).toLocaleString("es-MX") : "—"}</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
