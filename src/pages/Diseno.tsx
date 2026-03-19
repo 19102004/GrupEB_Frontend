@@ -24,7 +24,6 @@ function estadoLabel(estadoId: number): "pendiente" | "en_proceso" | "aprobado" 
   return "pendiente";
 }
 
-// ── Descarga PDF dado un folio ────────────────────────────────
 async function descargarPdfOrden(noPedido: number, noProduccion: string): Promise<void> {
   const data = await getOrdenProduccion(noPedido);
   const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
@@ -76,18 +75,15 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     repeticion_kidder:       producto.repeticion_kidder    ?? null,
     repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
     fecha_entrega:           producto.fecha_entrega        ?? null,
-    // ── campos de merma ───────────────────────────────────────
     kilos:                   producto.kilos                ?? null,
     kilos_merma:             producto.kilos_merma          ?? null,
     pzas:                    producto.pzas                 ?? null,
     pzas_merma:              producto.pzas_merma           ?? null,
-    // ── progreso real de extrusión ────────────────────────────
     kilos_extruir:           producto.kilos_extruir        ?? null,
     metros_extruir:          producto.metros_extruir       ?? null,
   });
 }
 
-// ── Modal de gestión ─────────────────────────────────────────
 function EditarDisenoReal({
   pedido,
   onClose,
@@ -190,7 +186,6 @@ function EditarDisenoReal({
   return (
     <div className="space-y-5">
 
-      {/* ── Alerta PDF ── */}
       {alertaPdf.visible && (
         <div className="flex items-start gap-3 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-4 shadow-md">
           <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -220,7 +215,6 @@ function EditarDisenoReal({
         </div>
       )}
 
-      {/* Info cliente */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="font-semibold text-gray-900">{pedido.cliente || "—"}</p>
         <p className="text-sm text-gray-500">{pedido.empresa || "—"}</p>
@@ -230,7 +224,6 @@ function EditarDisenoReal({
         </p>
       </div>
 
-      {/* Banner anticipo pendiente */}
       {!(diseno as any).anticipo_cubierto && (
         <div className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200">
           <span className="text-lg flex-shrink-0">⚠️</span>
@@ -245,7 +238,6 @@ function EditarDisenoReal({
         </div>
       )}
 
-      {/* Contadores */}
       <div className="grid grid-cols-4 gap-3">
         {[
           { label: "Total",      value: total,             color: "text-gray-700"   },
@@ -260,7 +252,6 @@ function EditarDisenoReal({
         ))}
       </div>
 
-      {/* Banner estado general */}
       <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
         eg === "aprobado"   ? "bg-green-50 border-green-200"  :
         eg === "en_proceso" ? "bg-blue-50 border-blue-200"    :
@@ -281,7 +272,6 @@ function EditarDisenoReal({
         </p>
       </div>
 
-      {/* Aprobar todos */}
       {!diseno.diseno_completado && (
         <button
           onClick={handleAprobarTodos}
@@ -295,7 +285,6 @@ function EditarDisenoReal({
         </button>
       )}
 
-      {/* Lista de productos */}
       <div className="space-y-3">
         {diseno.productos.map((producto: any) => {
           const isGuardando = guardando === producto.iddiseno_producto;
@@ -332,33 +321,6 @@ function EditarDisenoReal({
                       : `${Number(producto.cantidad).toLocaleString()} piezas`
                     }
                   </p>
-                </div>
-              )}
-
-              {/* ── Datos de merma si la orden ya fue generada ── */}
-              {producto.orden_generada && (producto.kilos != null || producto.pzas != null) && (
-                <div className="mb-3 rounded-lg border-2 border-amber-200 overflow-hidden">
-                  <div className="bg-amber-400 px-3 py-1">
-                    <p className="text-xs font-bold text-white uppercase tracking-wide">📊 Merma</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-px bg-amber-100">
-                    <div className="bg-white px-3 py-1.5 text-center">
-                      <p className="text-[10px] text-gray-400 uppercase">Kilos sin merma</p>
-                      <p className="text-sm font-bold text-gray-800">{producto.kilos != null ? Number(producto.kilos).toFixed(2) : "—"} kg</p>
-                    </div>
-                    <div className="bg-amber-50 px-3 py-1.5 text-center">
-                      <p className="text-[10px] text-amber-600 uppercase font-semibold">Kilos con merma</p>
-                      <p className="text-sm font-bold text-amber-700">{producto.kilos_merma != null ? Number(producto.kilos_merma).toFixed(2) : "—"} kg</p>
-                    </div>
-                    <div className="bg-white px-3 py-1.5 text-center border-t border-amber-100">
-                      <p className="text-[10px] text-gray-400 uppercase">Pzas sin merma</p>
-                      <p className="text-sm font-bold text-gray-800">{producto.pzas != null ? Number(producto.pzas).toLocaleString("es-MX") : "—"}</p>
-                    </div>
-                    <div className="bg-amber-50 px-3 py-1.5 text-center border-t border-amber-100">
-                      <p className="text-[10px] text-amber-600 uppercase font-semibold">Pzas con merma</p>
-                      <p className="text-sm font-bold text-amber-700">{producto.pzas_merma != null ? Number(producto.pzas_merma).toLocaleString("es-MX") : "—"}</p>
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -463,7 +425,6 @@ function EditarDisenoReal({
   );
 }
 
-// ── Página principal ──────────────────────────────────────────
 export default function Diseno() {
   const [pedidos,      setPedidos]      = useState<Pedido[]>([]);
   const [loading,      setLoading]      = useState(false);
@@ -522,7 +483,7 @@ export default function Diseno() {
   };
 
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-4">Gestión de Diseños</h1>
       <p className="text-slate-400 mb-6">Administra y aprueba los diseños de productos de cada pedido.</p>
 

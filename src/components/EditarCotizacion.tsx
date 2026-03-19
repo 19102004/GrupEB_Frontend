@@ -5,6 +5,8 @@ import {
   actualizarObservacion,
   actualizarEstado,
 } from "../services/cotizacionesService";
+import { generarPdfPedido } from "../services/generarPdfPedido";
+import { getVentaByPedido } from "../services/ventasservice";
 
 const ESTADO_ID = {
   PENDIENTE:  1,
@@ -26,6 +28,50 @@ function normalizarEstado(estado: string): "Pendiente" | "Aprobada" | "Rechazada
   return "Pendiente";
 }
 
+// ── Helpers para construir productos PDF ─────────────────────
+function resolverCalibre(p: any): string {
+  const mat = (p.material || "").toUpperCase();
+  const esBopp = mat.includes("BOPP") || mat.includes("CELOFAN") || mat.includes("CELOFÁN");
+  if (esBopp) {
+    const cb = p.calibre_bopp ? String(p.calibre_bopp).trim() : "";
+    if (cb && cb !== "0") return cb;
+  }
+  const c = p.calibre ? String(p.calibre).trim() : "";
+  if (c && c !== "0") return c;
+  const cb2 = p.calibre_bopp ? String(p.calibre_bopp).trim() : "";
+  return cb2 && cb2 !== "0" ? cb2 : "";
+}
+
+function buildProductosPdf(productos: ProductoCotizacion[]) {
+  return productos.map(p => ({
+    nombre:             p.nombre,
+    material:           p.material            || "",
+    calibre:            resolverCalibre(p),
+    tintas:             p.tintas,
+    caras:              p.caras,
+    medidasFormateadas: p.medidasFormateadas   || "",
+    medidas:            p.medidas             || {},
+    bk:                 p.bk                  || null,
+    foil:               p.foil                || null,
+    laminado:           p.laminado            || null,
+    uvBr:               p.uv_br                || null,
+    pigmentos:          p.pigmentos            || null,
+    pantones:           p.pantones             || null,
+    asa_suaje:          p.asa_suaje            || null,
+    observacion:        p.observacion          || null,
+    por_kilo:           p.por_kilo             || null,
+    // Solo los detalles aprobados van al PDF de pedido
+    detalles: (p.detalles || [])
+      .filter((d: any) => d.aprobado === true)
+      .map((d: any) => ({
+        cantidad:      d.cantidad,
+        precio_total:  d.precio_total,
+        kilogramos:    d.kilogramos   ?? null,
+        modo_cantidad: d.modo_cantidad || "unidad",
+      })),
+  }));
+}
+
 export default function EditarCotizacion({
   cotizacion,
   onSave,
@@ -44,7 +90,6 @@ export default function EditarCotizacion({
   const [mensajeExito,   setMensajeExito]   = useState<string | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState<number | null>(null);
 
-  // ── Modal de confirmación de conversión a pedido ──
   const [modalConfirmarOpen, setModalConfirmarOpen] = useState(false);
 
   const totalDetallesAprobados = productos
@@ -102,22 +147,43 @@ export default function EditarCotizacion({
     }
   };
 
-  // ── Inicia el flujo de aprobación — abre modal si va a convertirse a pedido ──
   const handleClickAprobar = () => {
     if (totalDetallesAprobados === 0) return;
-    // Si es una cotización que aún no tiene pedido → mostrar confirmación
     if (cotizacion.tipo_documento === "cotizacion" && !cotizacion.no_pedido) {
       setModalConfirmarOpen(true);
     } else {
-      // Ya es pedido o ya fue aprobada antes → guardar directamente
       handleCambiarEstado(ESTADO_ID.APROBADO);
     }
   };
 
-  // ── Confirma la conversión desde el modal ──
   const handleConfirmarConversion = () => {
     setModalConfirmarOpen(false);
     handleCambiarEstado(ESTADO_ID.APROBADO);
+  };
+
+  // ── Descarga automática del PDF de pedido ─────────────────
+  const descargarPdfPedido = async (noPedido: number) => {
+    try {
+      const venta = await getVentaByPedido(noPedido);
+      await generarPdfPedido({
+        no_pedido:     noPedido,
+        no_cotizacion: cotizacion.no_cotizacion,
+        fecha:         new Date().toISOString(),
+        cliente:       cotizacion.cliente  || "",
+        empresa:       cotizacion.empresa  || "",
+        telefono:      cotizacion.telefono || "",
+        correo:        cotizacion.correo   || "",
+        impresion:     cotizacion.impresion ?? null,
+        subtotal:      Number(venta.subtotal),
+        iva:           Number(venta.iva),
+        total:         Number(venta.total),
+        anticipo:      Number(venta.anticipo),
+        saldo:         Number(venta.saldo),
+        productos:     buildProductosPdf(productos),
+      });
+    } catch (pdfErr) {
+      console.warn("⚠️ No se pudo generar el PDF de pedido automáticamente:", pdfErr);
+    }
   };
 
   const handleCambiarEstado = async (estadoId: number) => {
@@ -139,10 +205,13 @@ export default function EditarCotizacion({
       const estadoNombre = estadoId === ESTADO_ID.APROBADO ? "Aprobada" : "Rechazada";
       setEstadoActual(estadoNombre);
 
+      // ✅ Conversión exitosa → descargar PDF de pedido automáticamente
       if (respuesta.convertida_a_pedido && respuesta.no_pedido) {
         setMensajeExito(
-          `✓ Cotización aprobada y convertida al Pedido #${respuesta.no_pedido} exitosamente`
+          `✓ Cotización aprobada y convertida al Pedido #${respuesta.no_pedido} — descargando PDF...`
         );
+        // No bloqueamos el flujo — va en paralelo con el onSave
+        descargarPdfPedido(respuesta.no_pedido);
       } else {
         setMensajeExito(
           estadoId === ESTADO_ID.APROBADO
@@ -216,6 +285,7 @@ export default function EditarCotizacion({
               <p>Se le asignará un <strong>folio de pedido nuevo</strong> e independiente.</p>
               <p>La cotización original seguirá visible en el módulo de <strong>Cotizaciones</strong>.</p>
               <p>Esta acción <strong>no se puede deshacer</strong>.</p>
+              <p className="text-amber-700">📄 El PDF del pedido se descargará automáticamente.</p>
             </div>
 
             <p className="text-sm text-gray-700">
@@ -263,7 +333,7 @@ export default function EditarCotizacion({
         </div>
       )}
 
-      {/* ── Badge si ya es pedido ── */}
+      {/* Badge si ya es pedido */}
       {cotizacion.tipo_documento === "pedido" && cotizacion.no_pedido && (
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -303,14 +373,13 @@ export default function EditarCotizacion({
 
         <div className="p-4 space-y-4 bg-gray-50">
           {productos.map((prod, iProd) => {
-            const pantonesList  = parsearPantones(prod.pantones);
-            const tienePantones = pantonesList.length > 0;
+            const pantonesList   = parsearPantones(prod.pantones);
+            const tienePantones  = pantonesList.length > 0;
             const tienePigmentos = !!prod.pigmentos;
 
             return (
               <div key={prod.idcotizacion_producto} className="bg-white border-2 border-gray-200 rounded-lg p-4">
 
-                {/* Encabezado producto */}
                 <div className="mb-3">
                   <h4 className="font-semibold text-gray-900 text-base">{prod.nombre}</h4>
                   <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-500">
@@ -391,9 +460,7 @@ export default function EditarCotizacion({
                           <div className="space-y-1 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-500">
-                                {det.modo_cantidad === "kilo" && det.kilogramos
-                                  ? "Kilogramos:"
-                                  : "Cantidad:"}
+                                {det.modo_cantidad === "kilo" && det.kilogramos ? "Kilogramos:" : "Cantidad:"}
                               </span>
                               <span className="font-bold text-gray-900">
                                 {det.modo_cantidad === "kilo" && det.kilogramos

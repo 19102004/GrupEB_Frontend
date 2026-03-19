@@ -12,6 +12,7 @@ import Diseno from "./pages/Diseno";
 import AnticipoLiquidacion from "./pages/AnticipoLiquidacion";
 import Seguimiento from "./pages/Seguimiento";
 import Pedido from "./pages/Pedido";
+import EstadoCuenta from "./pages/EstadoCuenta";
 
 function App() {
   return (
@@ -111,6 +112,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+           path="/estadocuenta" 
+           element={
+            <ProtectedRoute>
+              <EstadoCuenta />
+            </ProtectedRoute>
+} />
 
           {/* Redirigir cualquier ruta no encontrada al login */}
           <Route path="*" element={<Navigate to="/" replace />} />

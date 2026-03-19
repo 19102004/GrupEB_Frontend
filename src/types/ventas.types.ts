@@ -1,15 +1,9 @@
-// ============================================================
-// MÉTODO DE PAGO
-// ============================================================
 export interface MetodoPago {
   idmetodo_pago: number;
   codigo:        string;
   tipo_pago:     string;
 }
 
-// ============================================================
-// PAGO INDIVIDUAL (historial)
-// ============================================================
 export interface VentaPago {
   idventa_pago:  number;
   monto:         number;
@@ -20,34 +14,35 @@ export interface VentaPago {
   idmetodo_pago: number;
 }
 
-// ============================================================
-// VENTA COMPLETA (con pagos)
-// ============================================================
 export interface Venta {
-  idventas:       number;
+  idventas:              number;
   solicitud_idsolicitud: number;
-  subtotal:       number;
-  iva:            number;
-  total:          number;
-  anticipo:       number;
-  saldo:          number;
-  abono:          number;
-  fecha_creacion: string;
-  estado_id:      number;
-  estado_nombre:  string;
-  no_pedido:      number;
-  no_cotizacion:  number | null;
-  fecha_pedido:   string;
-  cliente:        string;
-  empresa:        string;
-  telefono:       string;
-  correo:         string;
-  pagos:          VentaPago[];
+  // ── Original — nunca cambia ───────────────────────────────
+  subtotal:              number;
+  iva:                   number;
+  total:                 number;
+  // ── Real — calculado con producción final ─────────────────
+  subtotal_real:         number | null;
+  iva_real:              number | null;
+  total_real:            number | null;
+  diferencia_total:      number | null;
+  // ── Pagos ─────────────────────────────────────────────────
+  anticipo:              number;
+  saldo:                 number;
+  abono:                 number;
+  fecha_creacion:        string;
+  estado_id:             number;
+  estado_nombre:         string;
+  no_pedido:             number;
+  no_cotizacion:         number | null;
+  fecha_pedido:          string;
+  cliente:               string;
+  empresa:               string;
+  telefono:              string;
+  correo:                string;
+  pagos:                 VentaPago[];
 }
 
-// ============================================================
-// PRODUCTO EN DISEÑO
-// ============================================================
 export interface DisenoProducto {
   iddiseno_producto:    number;
   idsolicitud_producto: number;
@@ -58,32 +53,26 @@ export interface DisenoProducto {
   fecha:                string;
 }
 
-// ============================================================
-// DISEÑO COMPLETO DE UN PEDIDO
-// ============================================================
 export interface Diseno {
-  iddiseno:            number;
-  solicitud_idsolicitud: number;
-  estado_id:           number;
-  estado_nombre:       string;
-  estado_diseno:       string;
-  fecha:               string;
-  no_pedido:           number;
-  no_cotizacion:       number | null;
-  productos:           DisenoProducto[];
-  total_productos:     number;
-  aprobados:           number;
-  rechazados:          number;
-  pendientes:          number;
-  diseno_completado:   boolean;
-  tiene_rechazados:    boolean;
+  iddiseno:               number;
+  solicitud_idsolicitud:  number;
+  estado_id:              number;
+  estado_nombre:          string;
+  estado_diseno:          string;
+  fecha:                  string;
+  no_pedido:              number;
+  no_cotizacion:          number | null;
+  productos:              DisenoProducto[];
+  total_productos:        number;
+  aprobados:              number;
+  rechazados:             number;
+  pendientes:             number;
+  diseno_completado:      boolean;
+  tiene_rechazados:       boolean;
 }
 
-// ============================================================
-// CONDICIONES DE PRODUCCIÓN
-// ============================================================
 export interface CondicionesProduccion {
-  no_pedido:       number;
+  no_pedido:        number;
   puede_produccion: boolean;
   condiciones: {
     anticipo_cubierto:   boolean;

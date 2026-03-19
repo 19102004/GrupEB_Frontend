@@ -242,7 +242,7 @@ export default function Plastico() {
 
   if (cargandoCatalogos) {
     return (
-      <Dashboard userName="Administrador">
+      <Dashboard>
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -255,7 +255,7 @@ export default function Plastico() {
 
   if (errorCatalogos) {
     return (
-      <Dashboard userName="Administrador">
+      <Dashboard>
         <div className="flex items-center justify-center min-h-screen">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
             <h2 className="text-red-800 font-semibold mb-2">Error al cargar catálogos</h2>
@@ -270,7 +270,7 @@ export default function Plastico() {
   }
 
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-6">Dar de alta producto</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

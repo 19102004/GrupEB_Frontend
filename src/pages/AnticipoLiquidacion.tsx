@@ -10,6 +10,10 @@ import {
 } from "../services/ventasservice";
 import { getOrdenProduccion } from "../services/seguimientoService";
 import { generarPdfOrdenProduccion } from "../services/generarPdfOrdenProduccion";
+import { generarPdfEstadoCuenta } from "../services/generarPdfEstadoCuenta";
+import { generarPdfHistorialPagos } from "../services/generarPdfHistorialPagos";
+import { getEstadoCuenta } from "../services/estadoCuentaService";
+import type { EstadoCuenta } from "../services/estadoCuentaService";
 import type { Venta, VentaPago, MetodoPago } from "../types/ventas.types";
 
 const ESTADO = { PENDIENTE: 1, EN_PROCESO: 2, PAGADO: 6 } as const;
@@ -31,12 +35,10 @@ function calcularEstado(abono: number, anticipo: number, saldo: number): number 
   return ESTADO.PENDIENTE;
 }
 
-// ── Descarga PDF dado un folio ────────────────────────────────
 async function descargarPdfOrden(noPedido: number, noProduccion: string): Promise<void> {
   const data = await getOrdenProduccion(noPedido);
   const producto = data.productos.find((p: any) => p.no_produccion === noProduccion);
   if (!producto) throw new Error(`Producto con folio ${noProduccion} no encontrado`);
-
   await generarPdfOrdenProduccion({
     no_pedido:               data.no_pedido,
     no_produccion:           producto.no_produccion,
@@ -83,20 +85,269 @@ async function descargarPdfOrden(noPedido: number, noProduccion: string): Promis
     repeticion_kidder:       producto.repeticion_kidder    ?? null,
     repeticion_sicosa:       producto.repeticion_sicosa    ?? null,
     fecha_entrega:           producto.fecha_entrega        ?? null,
-    // ── campos de merma ───────────────────────────────────────
     kilos:                   producto.kilos                ?? null,
     kilos_merma:             producto.kilos_merma          ?? null,
     pzas:                    producto.pzas                 ?? null,
     pzas_merma:              producto.pzas_merma           ?? null,
-    // ── progreso real de extrusión ────────────────────────────
     kilos_extruir:           producto.kilos_extruir        ?? null,
     metros_extruir:          producto.metros_extruir       ?? null,
   });
 }
 
-// ── Modal de detalle / pagos ──────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// SECCIÓN ESTADO DE CUENTA
+// ════════════════════════════════════════════════════════════
+function SeccionEstadoCuenta({
+  noPedido,
+  pagos,
+  onActualizar,
+}: {
+  noPedido:     number;
+  pagos:        VentaPago[];
+  onActualizar: (ventaActualizada: Partial<Venta>) => void;
+}) {
+  const [expandido,    setExpandido]    = useState(false);
+  const [datos,        setDatos]        = useState<EstadoCuenta | null>(null);
+  const [cargando,     setCargando]     = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [cargado,      setCargado]      = useState(false);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
+
+  const cargar = async () => {
+    if (cargado) return;
+    setCargando(true);
+    setError(null);
+    try {
+      const data = await getEstadoCuenta(noPedido);
+      setDatos(data);
+      setCargado(true);
+      onActualizar({
+        saldo:            data.saldo,
+        anticipo:         data.anticipo,
+        abono:            data.abono,
+        subtotal_real:    data.subtotal_real,
+        iva_real:         data.iva_real,
+        total_real:       data.total_real,
+        diferencia_total: data.diferencia_total,
+      });
+    } catch (e: any) {
+      const msg = e.response?.data?.detalle || e.response?.data?.error || "Error al cargar estado de cuenta";
+      setError(msg);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const handleToggle = () => {
+    const nuevo = !expandido;
+    setExpandido(nuevo);
+    if (nuevo && !cargado) cargar();
+  };
+
+  const handleDescargarPdf = async () => {
+    if (!datos) return;
+    setGenerandoPdf(true);
+    try {
+      await generarPdfEstadoCuenta(datos, pagos);
+    } catch (e) {
+      console.error("Error al generar PDF estado de cuenta:", e);
+    } finally {
+      setGenerandoPdf(false);
+    }
+  };
+
+  return (
+    <div className="border border-indigo-200 rounded-xl overflow-hidden">
+      <button
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-indigo-600 text-sm">📊</span>
+          <span className="text-sm font-semibold text-indigo-800">Estado de Cuenta</span>
+          <span className="text-xs text-indigo-500 font-normal">(precio final basado en producción real)</span>
+        </div>
+        <svg className={`w-4 h-4 text-indigo-500 transition-transform duration-200 ${expandido ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expandido && (
+        <div className="p-4 bg-white space-y-4">
+          {cargando && (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent" />
+            </div>
+          )}
+
+          {error && !cargando && (
+            <div className="text-center py-6 space-y-2">
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                ⚠️ {error}
+              </p>
+              <p className="text-xs text-gray-400">
+                El estado de cuenta solo está disponible cuando todos los procesos de producción han finalizado.
+              </p>
+            </div>
+          )}
+
+          {datos && !cargando && (
+            <>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Comparativa por producto
+                </p>
+                {datos.productos.map(prod => {
+                  const diffPzas   = prod.diferencia_piezas;
+                  const diffPrecio = prod.diferencia_precio;
+                  return (
+                    <div key={prod.idsolicitud_producto} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-800">{prod.nombre}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {prod.no_produccion} · {prod.tintas} tinta(s) · {prod.caras} cara(s)
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div className="bg-white rounded p-2 text-center border border-gray-100">
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Ordenado</p>
+                          <p className="text-xs font-bold text-gray-700">{Number(prod.cantidad_original).toLocaleString("es-MX")}</p>
+                        </div>
+                        <div className="bg-blue-50 rounded p-2 text-center border border-blue-100">
+                          <p className="text-[9px] text-blue-400 uppercase tracking-wide">Real</p>
+                          <p className="text-xs font-bold text-blue-700">{Number(prod.cantidad_real).toLocaleString("es-MX")}</p>
+                        </div>
+                        <div className={`rounded p-2 text-center border ${
+                          diffPzas === 0 ? "bg-gray-50 border-gray-100" :
+                          diffPzas > 0   ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
+                        }`}>
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Dif. pzas</p>
+                          <p className={`text-xs font-bold ${
+                            diffPzas === 0 ? "text-gray-500" : diffPzas > 0 ? "text-green-700" : "text-red-700"
+                          }`}>{diffPzas > 0 ? "+" : ""}{Number(diffPzas).toLocaleString("es-MX")}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div className="bg-white rounded p-2 text-center border border-gray-100">
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Precio orig.</p>
+                          <p className="text-xs font-bold text-gray-700">${fmt(prod.precio_total_original)}</p>
+                        </div>
+                        <div className="bg-blue-50 rounded p-2 text-center border border-blue-100">
+                          <p className="text-[9px] text-blue-400 uppercase tracking-wide">Precio real</p>
+                          <p className="text-xs font-bold text-blue-700">${fmt(prod.precio_total_real)}</p>
+                        </div>
+                        <div className={`rounded p-2 text-center border ${
+                          diffPrecio === 0 ? "bg-gray-50 border-gray-100" :
+                          diffPrecio > 0   ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"
+                        }`}>
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Dif. precio</p>
+                          <p className={`text-xs font-bold ${
+                            diffPrecio === 0 ? "text-gray-500" : diffPrecio > 0 ? "text-green-700" : "text-red-700"
+                          }`}>{diffPrecio > 0 ? "+" : ""}${fmt(diffPrecio)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+                <div className="bg-gray-800 px-4 py-2">
+                  <p className="text-xs font-bold text-white uppercase tracking-wide">Resumen financiero</p>
+                </div>
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3 pb-3 border-b border-gray-200">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1.5 font-medium">Original (cotizado)</p>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-gray-700">${fmt(datos.subtotal_original)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">IVA 16%</span><span className="text-gray-700">${fmt(datos.iva_original)}</span></div>
+                        <div className="flex justify-between font-semibold border-t border-gray-100 pt-1"><span className="text-gray-600">Total</span><span className="text-gray-800">${fmt(datos.total_original)}</span></div>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-500 mb-1.5 font-medium">Real (producción final)</p>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="text-blue-700">${fmt(datos.subtotal_real)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">IVA 16%</span><span className="text-blue-700">${fmt(datos.iva_real)}</span></div>
+                        <div className="flex justify-between font-semibold border-t border-blue-100 pt-1"><span className="text-gray-600">Total</span><span className="text-blue-800">${fmt(datos.total_real)}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`rounded-lg overflow-hidden border ${
+                    datos.diferencia_total === 0 ? "border-gray-200" :
+                    datos.diferencia_total > 0   ? "border-green-200" : "border-red-200"
+                  }`}>
+                    <div className={`px-3 py-2 flex justify-between items-center ${
+                      datos.diferencia_total === 0 ? "bg-gray-100" :
+                      datos.diferencia_total > 0   ? "bg-green-50" : "bg-red-50"
+                    }`}>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">Diferencia total c/IVA</p>
+                        <p className="text-[10px] text-gray-400">Total real − Total original</p>
+                      </div>
+                      <span className={`text-sm font-bold ${
+                        datos.diferencia_total === 0 ? "text-gray-500" :
+                        datos.diferencia_total > 0   ? "text-green-700" : "text-red-700"
+                      }`}>
+                        {datos.diferencia_total > 0 ? "+" : ""}${fmt(datos.diferencia_total)}
+                      </span>
+                    </div>
+                    {datos.diferencia_total !== 0 && (
+                      <div className={`px-3 py-2 text-xs font-medium ${
+                        datos.diferencia_total > 0 ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"
+                      }`}>
+                        {datos.diferencia_total > 0
+                          ? `⚠️ El cliente debe pagar $${fmt(datos.diferencia_total)} adicionales por mayor producción`
+                          : `✅ Se debe devolver $${fmt(Math.abs(datos.diferencia_total))} al cliente por menor producción`}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Total abonado</span>
+                      <span className="text-green-700 font-semibold">${fmt(datos.abono)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold border-t border-gray-200 pt-1.5">
+                      <span className="text-gray-700">Saldo pendiente (sobre total real)</span>
+                      <span className={datos.saldo <= 0 ? "text-green-600" : "text-red-600"}>
+                        {datos.saldo <= 0 ? "✓ Liquidado" : `$${fmt(datos.saldo)}`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleDescargarPdf}
+                disabled={generandoPdf}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {generandoPdf
+                  ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                }
+                {generandoPdf ? "Generando PDF..." : "Descargar Estado de Cuenta (PDF)"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// MODAL DETALLE / PAGOS
+// ════════════════════════════════════════════════════════════
 function EditarAntLiqReal({
-  venta,
+  venta: ventaInicial,
   metodos,
   onClose,
   onActualizar,
@@ -106,6 +357,7 @@ function EditarAntLiqReal({
   onClose:      () => void;
   onActualizar: (v: Venta) => void;
 }) {
+  const [venta,           setVenta]           = useState<Venta>(ventaInicial);
   const [monto,           setMonto]           = useState("");
   const [metodoPagoId,    setMetodoPagoId]    = useState<number>(metodos[0]?.idmetodo_pago ?? 1);
   const [esAnticipo,      setEsAnticipo]      = useState(false);
@@ -114,101 +366,83 @@ function EditarAntLiqReal({
   const [guardando,       setGuardando]       = useState(false);
   const [eliminando,      setEliminando]      = useState<number | null>(null);
   const [error,           setError]           = useState<string | null>(null);
-
+  const [descargandoHist, setDescargandoHist] = useState(false);
   const [alertaPdf, setAlertaPdf] = useState<{ visible: boolean; folios: string[] }>({
-    visible: false,
-    folios:  [],
+    visible: false, folios: [],
   });
 
-  const anticipo    = Number(venta.anticipo);
-  const saldo       = Number(venta.saldo);
-  const totalPagado = Number(venta.abono);
-  const total       = Number(venta.total);
-
+  const anticipo         = Number(venta.anticipo);
+  const saldo            = Number(venta.saldo);
+  const totalPagado      = Number(venta.abono);
+  const totalRef         = Number(venta.total_real ?? venta.total);
   const anticipoRestante = Math.max(anticipo - totalPagado, 0);
   const anticipoCubierto = anticipoRestante <= 0.01;
   const pagado           = saldo <= 0.01;
+  const pctPagado        = totalRef > 0 ? Math.min((totalPagado / totalRef) * 100, 100) : 0;
 
   const recargar = async () => {
     const actualizada = await getVentaByPedido(venta.no_pedido);
+    setVenta(actualizada);
     onActualizar(actualizada);
     return actualizada;
+  };
+
+  const handleEstadoCuentaActualiza = (parcial: Partial<Venta>) => {
+    setVenta(prev => ({ ...prev, ...parcial }));
+    onActualizar({ ...venta, ...parcial });
   };
 
   const handleRegistrarPago = async () => {
     const montoNum = parseFloat(monto);
     if (!monto || isNaN(montoNum) || montoNum <= 0) {
-      setError("Ingresa un monto válido mayor a 0");
-      return;
+      setError("Ingresa un monto válido mayor a 0"); return;
     }
     if (montoNum > saldo + 0.01) {
-      setError(`El monto excede el saldo pendiente ($${fmt(saldo)})`);
-      return;
+      setError(`El monto excede el saldo pendiente ($${fmt(saldo)})`); return;
     }
-
     setGuardando(true);
     setError(null);
-
     try {
       const response = await registrarPago(venta.idventas, {
-        metodoPagoId,
-        monto:       montoNum,
-        esAnticipo,
+        metodoPagoId, monto: montoNum, esAnticipo,
         observacion: observacion.trim() || undefined,
       });
-
       await recargar();
-
-      setMonto("");
-      setObservacion("");
-      setEsAnticipo(false);
-      setMontoEsAnticipo(false);
+      setMonto(""); setObservacion(""); setEsAnticipo(false); setMontoEsAnticipo(false);
 
       const foliosNuevos: string[] = response?.ordenes_generadas ?? [];
-
       if (foliosNuevos.length > 0) {
         const foliosDescargados: string[] = [];
-
         for (const folio of foliosNuevos) {
-          try {
-            await descargarPdfOrden(venta.no_pedido, folio);
-            foliosDescargados.push(folio);
-          } catch (pdfErr) {
-            console.error(`Error al generar PDF de ${folio}:`, pdfErr);
-          }
+          try { await descargarPdfOrden(venta.no_pedido, folio); foliosDescargados.push(folio); }
+          catch (pdfErr) { console.error(`Error al generar PDF de ${folio}:`, pdfErr); }
         }
-
-        if (foliosDescargados.length > 0) {
-          setAlertaPdf({ visible: true, folios: foliosDescargados });
-        }
+        if (foliosDescargados.length > 0) setAlertaPdf({ visible: true, folios: foliosDescargados });
       }
-
     } catch (e: any) {
       setError(e.response?.data?.error || "Error al registrar pago");
-    } finally {
-      setGuardando(false);
-    }
+    } finally { setGuardando(false); }
   };
 
   const handleEliminarPago = async (pago: VentaPago) => {
     if (!confirm(`¿Eliminar el pago de $${fmt(pago.monto)}?`)) return;
     setEliminando(pago.idventa_pago);
-    try {
-      await eliminarPago(pago.idventa_pago);
-      await recargar();
-    } catch (e: any) {
-      alert(e.response?.data?.error || "Error al eliminar pago");
-    } finally {
-      setEliminando(null);
-    }
+    try { await eliminarPago(pago.idventa_pago); await recargar(); }
+    catch (e: any) { alert(e.response?.data?.error || "Error al eliminar pago"); }
+    finally { setEliminando(null); }
   };
 
-  const pctPagado = total > 0 ? Math.min((totalPagado / total) * 100, 100) : 0;
+  const handleDescargarHistorial = async () => {
+    setDescargandoHist(true);
+    try { await generarPdfHistorialPagos(venta); }
+    catch (e) { console.error("Error al generar PDF historial:", e); }
+    finally { setDescargandoHist(false); }
+  };
 
   return (
     <div className="space-y-6">
 
-      {/* ── Alerta PDF ── */}
+      {/* Alerta PDF */}
       {alertaPdf.visible && (
         <div className="flex items-start gap-3 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-4 shadow-md">
           <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -227,10 +461,8 @@ function EditarAntLiqReal({
             </div>
             <p className="text-green-600 text-xs mt-1">El PDF se descargó automáticamente.</p>
           </div>
-          <button
-            onClick={() => setAlertaPdf({ visible: false, folios: [] })}
-            className="flex-shrink-0 text-green-400 hover:text-green-600 transition-colors"
-          >
+          <button onClick={() => setAlertaPdf({ visible: false, folios: [] })}
+            className="flex-shrink-0 text-green-400 hover:text-green-600 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -256,10 +488,10 @@ function EditarAntLiqReal({
       {/* Resumen financiero */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Subtotal",       value: fmt(venta.subtotal), color: "text-gray-700"               },
-          { label: "IVA 16%",        value: fmt(venta.iva),      color: "text-gray-500"               },
-          { label: "Total con IVA",  value: fmt(total),          color: "text-gray-900 font-bold"     },
-          { label: "Anticipo (50%)", value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
+          { label: "Subtotal orig.",  value: fmt(venta.subtotal), color: "text-gray-700"               },
+          { label: "IVA 16%",         value: fmt(venta.iva),      color: "text-gray-500"               },
+          { label: "Total orig.",     value: fmt(venta.total),    color: "text-gray-900 font-bold"     },
+          { label: "Anticipo (50%)",  value: fmt(anticipo),       color: "text-blue-700 font-semibold" },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
             <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -276,13 +508,9 @@ function EditarAntLiqReal({
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3 relative">
           <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10" style={{ left: "50%" }} />
-          <div
-            className={`h-3 rounded-full transition-all duration-500 ${
-              pctPagado >= 100 ? "bg-emerald-500" :
-              pctPagado >= 50  ? "bg-blue-500"    : "bg-yellow-500"
-            }`}
-            style={{ width: `${pctPagado}%` }}
-          />
+          <div className={`h-3 rounded-full transition-all duration-500 ${
+            pctPagado >= 100 ? "bg-emerald-500" : pctPagado >= 50 ? "bg-blue-500" : "bg-yellow-500"
+          }`} style={{ width: `${pctPagado}%` }} />
         </div>
         <div className="flex justify-between mt-2 text-xs text-gray-500">
           <span>Pagado: <span className="font-semibold text-emerald-700">${fmt(totalPagado)}</span></span>
@@ -299,11 +527,38 @@ function EditarAntLiqReal({
         </p>
       </div>
 
+      {/* Estado de cuenta desplegable */}
+      <SeccionEstadoCuenta
+        noPedido={venta.no_pedido}
+        pagos={venta.pagos ?? []}
+        onActualizar={handleEstadoCuentaActualiza}
+      />
+
       {/* Historial de pagos */}
       <div>
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">
-          Historial de pagos ({venta.pagos?.length ?? 0})
-        </h4>
+        {/* Header con título y botón PDF */}
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-gray-700">
+            Historial de pagos ({venta.pagos?.length ?? 0})
+          </h4>
+          {(venta.pagos?.length ?? 0) > 0 && (
+            <button
+              onClick={handleDescargarHistorial}
+              disabled={descargandoHist}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-lg transition-colors border border-gray-200"
+            >
+              {descargandoHist
+                ? <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+              }
+              {descargandoHist ? "Generando..." : "PDF"}
+            </button>
+          )}
+        </div>
+
         {venta.pagos && venta.pagos.length > 0 ? (
           <div className="space-y-2">
             {venta.pagos.map(pago => (
@@ -328,15 +583,14 @@ function EditarAntLiqReal({
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleEliminarPago(pago)}
+                <button onClick={() => handleEliminarPago(pago)}
                   disabled={eliminando === pago.idventa_pago}
-                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                >
+                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50">
                   {eliminando === pago.idventa_pago
                     ? <div className="w-4 h-4 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
                     : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                   }
                 </button>
@@ -366,17 +620,9 @@ function EditarAntLiqReal({
               <label className="block text-xs font-medium text-gray-600 mb-1">Monto *</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={monto}
+                <input type="number" min="0.01" step="0.01" value={monto}
                   readOnly={montoEsAnticipo}
-                  onChange={e => {
-                    setMonto(e.target.value);
-                    setEsAnticipo(false);
-                    setMontoEsAnticipo(false);
-                  }}
+                  onChange={e => { setMonto(e.target.value); setEsAnticipo(false); setMontoEsAnticipo(false); }}
                   placeholder="0.00"
                   className={`w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-400 text-sm transition-colors ${
                     montoEsAnticipo ? "bg-blue-50 border-blue-300 cursor-not-allowed" : "bg-white"
@@ -385,27 +631,15 @@ function EditarAntLiqReal({
               </div>
               <div className="flex gap-2 mt-1 flex-wrap">
                 {!anticipoCubierto && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMonto(anticipoRestante.toFixed(2));
-                      setEsAnticipo(true);
-                      setMontoEsAnticipo(true);
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-800 underline"
-                  >
+                  <button type="button"
+                    onClick={() => { setMonto(anticipoRestante.toFixed(2)); setEsAnticipo(true); setMontoEsAnticipo(true); }}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline">
                     Anticipo restante (${fmt(anticipoRestante)})
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMonto(saldo.toFixed(2));
-                    setEsAnticipo(false);
-                    setMontoEsAnticipo(false);
-                  }}
-                  className="text-xs text-emerald-600 hover:text-emerald-800 underline"
-                >
+                <button type="button"
+                  onClick={() => { setMonto(saldo.toFixed(2)); setEsAnticipo(false); setMontoEsAnticipo(false); }}
+                  className="text-xs text-emerald-600 hover:text-emerald-800 underline">
                   Saldo completo (${fmt(saldo)})
                 </button>
               </div>
@@ -413,11 +647,8 @@ function EditarAntLiqReal({
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Método de pago *</label>
-              <select
-                value={metodoPagoId}
-                onChange={e => setMetodoPagoId(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
-              >
+              <select value={metodoPagoId} onChange={e => setMetodoPagoId(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm">
                 {metodos.map(m => (
                   <option key={m.idmetodo_pago} value={m.idmetodo_pago}>{m.tipo_pago}</option>
                 ))}
@@ -427,10 +658,7 @@ function EditarAntLiqReal({
 
           <div className="mb-3">
             <label className="block text-xs font-medium text-gray-600 mb-1">Observación (opcional)</label>
-            <input
-              type="text"
-              value={observacion}
-              onChange={e => setObservacion(e.target.value)}
+            <input type="text" value={observacion} onChange={e => setObservacion(e.target.value)}
               placeholder="Ej: Transferencia ref. 12345"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-400 text-sm"
             />
@@ -439,13 +667,8 @@ function EditarAntLiqReal({
           <div className="flex items-center justify-between">
             {!anticipoCubierto ? (
               <label className={`flex items-center gap-2 ${montoEsAnticipo ? "cursor-default" : "cursor-not-allowed opacity-40"}`}>
-                <input
-                  type="checkbox"
-                  checked={esAnticipo}
-                  readOnly
-                  disabled={!montoEsAnticipo}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
+                <input type="checkbox" checked={esAnticipo} readOnly disabled={!montoEsAnticipo}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 <span className={`text-sm ${montoEsAnticipo ? "text-blue-700 font-medium" : "text-gray-400"}`}>
                   {montoEsAnticipo ? "✓ Anticipo" : "Anticipo"}
                 </span>
@@ -456,11 +679,8 @@ function EditarAntLiqReal({
               </span>
             )}
 
-            <button
-              onClick={handleRegistrarPago}
-              disabled={guardando || !monto}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleRegistrarPago} disabled={guardando || !monto}
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {guardando
                 ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Guardando...</>
                 : <>
@@ -483,7 +703,8 @@ function EditarAntLiqReal({
       )}
 
       <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button onClick={onClose} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
+        <button onClick={onClose}
+          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
           Cerrar
         </button>
       </div>
@@ -491,7 +712,9 @@ function EditarAntLiqReal({
   );
 }
 
-// ── Página principal ──────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// PÁGINA PRINCIPAL
+// ════════════════════════════════════════════════════════════
 export default function AnticipoLiquidacion() {
   const [ventas,          setVentas]          = useState<Venta[]>([]);
   const [metodos,         setMetodos]         = useState<MetodoPago[]>([]);
@@ -585,15 +808,12 @@ export default function AnticipoLiquidacion() {
   };
 
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-2">Anticipo y Liquidación</h1>
       <p className="text-slate-400 mb-6">Gestiona los anticipos y liquidaciones de los pedidos activos.</p>
 
       <div className="mb-6 relative">
-        <input
-          type="text"
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
+        <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)}
           placeholder="Buscar por cliente, empresa, N° pedido o N° cotización..."
           className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
@@ -622,9 +842,7 @@ export default function AnticipoLiquidacion() {
               <tr key={v.idventas} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   #{v.no_pedido}
-                  {v.no_cotizacion && (
-                    <span className="ml-1 text-xs text-gray-400 font-normal">Cot.#{v.no_cotizacion}</span>
-                  )}
+                  {v.no_cotizacion && <span className="ml-1 text-xs text-gray-400 font-normal">Cot.#{v.no_cotizacion}</span>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fmtFecha(v.fecha_pedido)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{v.cliente || "—"}</td>
@@ -638,11 +856,8 @@ export default function AnticipoLiquidacion() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">{getEstadoBadge(v)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleEditar(v)}
-                    disabled={cargandoDet}
-                    className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
-                  >
+                  <button onClick={() => handleEditar(v)} disabled={cargandoDet}
+                    className="text-blue-600 hover:text-blue-900 disabled:opacity-50">
                     {cargandoDet ? "Cargando..." : "Ver/Editar"}
                   </button>
                 </td>

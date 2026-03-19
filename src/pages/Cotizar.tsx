@@ -310,7 +310,7 @@ export default function Cotizaciones() {
   };
 
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-2">Cotizaciones</h1>
       <p className="text-slate-400 mb-6">Gestión de cotizaciones y seguimiento de aprobaciones.</p>
 

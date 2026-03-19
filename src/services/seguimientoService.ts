@@ -67,6 +67,7 @@ export interface OrdenProduccionProducto {
   kilos_merma:             number | null;
   pzas:                    number | null;
   pzas_merma:              number | null;
+  metros_merma:            number | null;
   // ── Progreso real de extrusión ────────────────────────────
   kilos_extruir:           number | null;
   metros_extruir:          number | null;
@@ -83,6 +84,8 @@ export interface ProcesoRegistro {
   tabla:          string;
   estado:         string;
   registro:       any | null;
+  observaciones:  string | null;
+  observaciones_proceso_anterior: string | null;
 }
 
 export interface ProcesosOrdenRespuesta {
@@ -113,4 +116,45 @@ export const iniciarProceso = async (
 export const finalizarProceso = async (idproduccion: number, datos: Record<string, any>) => {
   const response = await api.put(`/procesos/${idproduccion}/finalizar`, datos);
   return response.data;
+};
+
+// ─────────────────────────────────────────────
+// BULTOS
+// ─────────────────────────────────────────────
+export interface Bulto {
+  idbulto:           number;
+  cantidad_unidades: number;
+  fecha_creacion:    string;
+  proceso_origen:    "bolseo" | "asa_flexible";
+}
+
+export interface BultosRespuesta {
+  bultos_finalizado: boolean;       // ← flag de cierre
+  bultos:            Bulto[];
+  total_bultos:      number;
+  total_unidades:    number;
+}
+
+export const getBultos = async (idproduccion: number): Promise<BultosRespuesta> => {
+  const { data } = await api.get(`/seguimiento/${idproduccion}/bultos`);
+  return data;
+};
+
+export const agregarBulto = async (
+  idproduccion: number,
+  cantidad_unidades: number
+): Promise<Bulto> => {
+  const { data } = await api.post(`/seguimiento/${idproduccion}/bultos`, { cantidad_unidades });
+  return data;
+};
+
+export const eliminarBulto = async (
+  idproduccion: number,
+  idbulto: number
+): Promise<void> => {
+  await api.delete(`/seguimiento/${idproduccion}/bultos/${idbulto}`);
+};
+
+export const finalizarBultos = async (idproduccion: number): Promise<void> => {
+  await api.patch(`/seguimiento/${idproduccion}/bultos/finalizar`);
 };

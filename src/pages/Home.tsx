@@ -2,7 +2,7 @@ import Dashboard from "../layouts/Sidebar";
 
 export default function Home() {
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-4">Inicio</h1>
 
       <p className="text-slate-400">

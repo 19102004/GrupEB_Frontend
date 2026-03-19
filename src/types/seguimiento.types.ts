@@ -43,4 +43,11 @@ export interface PedidoSeguimiento {
   cantidad_orden:   number | null;
   kilogramos_orden: number | null;
   modo_cantidad:    string;
+
+  // ── Campos de merma ──────────────────────────────────────
+  kilos:        number | null;
+  kilos_merma:  number | null;
+  pzas:         number | null;
+  pzas_merma:   number | null;
+  metros_merma: number | null;
 }

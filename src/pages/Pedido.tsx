@@ -316,7 +316,7 @@ export default function Pedidos() {
   };
 
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-2">Pedidos</h1>
       <p className="text-slate-400 mb-6">
         Gestión de pedidos activos — incluye pedidos directos y cotizaciones aprobadas.

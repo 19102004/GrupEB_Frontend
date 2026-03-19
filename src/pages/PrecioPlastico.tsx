@@ -139,7 +139,7 @@ export default function PrecioPlastico() {
 
   if (loading) {
     return (
-      <Dashboard userName="Administrador">
+      <Dashboard>
         <div className="flex items-center justify-center h-96">
           <p className="text-gray-500">Cargando tarifas...</p>
         </div>
@@ -148,7 +148,7 @@ export default function PrecioPlastico() {
   }
 
   return (
-    <Dashboard userName="Administrador">
+    <Dashboard>
       <h1 className="text-2xl font-bold mb-6">Costos de Producción - Plástico</h1>
 
       <div className="bg-white p-6 rounded-xl shadow">

@@ -1,9 +1,9 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import logo from "../assets/grupeblanco.png";
 
 interface DashboardProps {
-  userName: string;
   children: ReactNode;
 }
 
@@ -13,22 +13,26 @@ interface MenuItem {
   subItems: { name: string; path: string }[];
 }
 
-export default function Dashboard({ userName, children }: DashboardProps) {
+export default function Dashboard({ children }: DashboardProps) {
   const [open, setOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth(); // ← NUEVO
 
-  // Detectar tamaño
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
+
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       if (!mobile) setOpen(false);
     };
-
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
@@ -49,11 +53,7 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     { name: "Pedido", path: "/pedido", subItems: [] },
     { name: "Diseño", path: "/diseno", subItems: [] },
     { name: "Seguimiento", path: "/seguimiento", subItems: [] },
-    {
-      name: "Anticipo / Liquidación",
-      path: "/anticipolicacion",
-      subItems: [],
-    },
+    { name: "Anticipo / Liquidación", path: "/anticipolicacion", subItems: [] },
     {
       name: "Precios productos",
       subItems: [
@@ -64,7 +64,6 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     },
   ];
 
-  // Expandir menú activo
   useEffect(() => {
     menuItems.forEach((item) => {
       if (item.subItems.some((sub) => location.pathname.startsWith(sub.path))) {
@@ -89,7 +88,6 @@ export default function Dashboard({ userName, children }: DashboardProps) {
   const renderMenuItem = (item: MenuItem) => {
     const hasSub = item.subItems.length > 0;
     const expanded = expandedMenus.includes(item.name);
-
     const activeParent =
       item.path && isActive(item.path)
         ? true
@@ -113,13 +111,8 @@ export default function Dashboard({ userName, children }: DashboardProps) {
             }`}
         >
           <span>{item.name}</span>
-
           {hasSub && (
-            <span
-              className={`transition-transform ${
-                expanded ? "rotate-180" : ""
-              }`}
-            >
+            <span className={`transition-transform ${expanded ? "rotate-180" : ""}`}>
               ▼
             </span>
           )}
@@ -150,9 +143,24 @@ export default function Dashboard({ userName, children }: DashboardProps) {
     );
   };
 
+  // Bloque reutilizable de usuario + logout
+  const UserFooter = () => (
+    <div className="border-t border-slate-700 p-4 mt-auto space-y-2">
+      <div className="flex items-center gap-2 bg-slate-700 px-3 py-2 rounded text-white text-sm">
+        👤 <span>{user?.nombre} {user?.apellido}</span>
+      </div>
+      <button
+        onClick={handleLogout}
+        className="w-full px-3 py-2 rounded bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium transition"
+      >
+        Cerrar sesión
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex">
-      {/* OVERLAY */}
+      {/* OVERLAY móvil */}
       {isMobile && (
         <div
           onClick={() => setOpen(false)}
@@ -175,16 +183,9 @@ export default function Dashboard({ userName, children }: DashboardProps) {
               src={logo}
               alt="Grupeb"
               className="h-10 cursor-pointer"
-              onClick={() => {
-                navigate("/home");
-                setOpen(false);
-              }}
+              onClick={() => { navigate("/home"); setOpen(false); }}
             />
-
-            <button
-              onClick={() => setOpen(false)}
-              className="text-white text-2xl"
-            >
+            <button onClick={() => setOpen(false)} className="text-white text-2xl">
               ✕
             </button>
           </div>
@@ -193,15 +194,11 @@ export default function Dashboard({ userName, children }: DashboardProps) {
             {menuItems.map(renderMenuItem)}
           </nav>
 
-          <div className="border-t border-slate-700 p-4 mt-auto">
-            <div className="flex gap-2 bg-slate-700 px-3 py-2 rounded text-white">
-              👤 {userName}
-            </div>
-          </div>
+          <UserFooter />
         </aside>
       )}
 
-      {/* SIDEBAR DESKTOP / TABLET */}
+      {/* SIDEBAR DESKTOP */}
       {!isMobile && (
         <aside className="fixed inset-y-0 left-0 w-64 bg-slate-800 z-30 flex flex-col h-screen">
           <div
@@ -215,11 +212,7 @@ export default function Dashboard({ userName, children }: DashboardProps) {
             {menuItems.map(renderMenuItem)}
           </nav>
 
-          <div className="border-t border-slate-700 p-4 mt-auto">
-            <div className="flex gap-2 bg-slate-700 px-3 py-2 rounded text-white">
-              👤 {userName}
-            </div>
-          </div>
+          <UserFooter />
         </aside>
       )}
 
@@ -228,19 +221,12 @@ export default function Dashboard({ userName, children }: DashboardProps) {
         {isMobile && (
           <header className="sticky top-0 z-20 bg-white shadow">
             <div className="flex justify-between px-4 py-3">
-              <button onClick={() => setOpen(true)} className="text-xl">
-                ☰
-              </button>
-
-              <h1
-                onClick={() => navigate("/home")}
-                className="font-bold cursor-pointer"
-              >
+              <button onClick={() => setOpen(true)} className="text-xl">☰</button>
+              <h1 onClick={() => navigate("/home")} className="font-bold cursor-pointer">
                 GRUPEB
               </h1>
-
-              <div className="flex gap-2 bg-slate-200 px-3 py-2 rounded">
-                👤 {userName}
+              <div className="flex gap-2 bg-slate-200 px-3 py-2 rounded text-sm">
+                👤 {user?.nombre}
               </div>
             </div>
           </header>
